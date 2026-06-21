@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "PengaduanMasyarakatIOS",
+    "slug": "PengaduanMasyarakatIOS",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app_logo.png",
+    "scheme": "pengaduanmasyarakatios",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/app_logo.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/app_logo.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "android": {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 76
+          }
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
