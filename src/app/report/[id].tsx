@@ -106,6 +106,13 @@ export default function ReportDetailScreen() {
     if (!report?.audioBase64) return;
     
     try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
       if (sound) {
         if (isPlayingVN) {
           await sound.pauseAsync();

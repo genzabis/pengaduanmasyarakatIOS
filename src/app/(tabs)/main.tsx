@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { auth, database } from '../../../firebaseConfig';
 import { ref, push, set } from 'firebase/database';
 import { Colors } from '../../constants/Colors';
@@ -105,7 +105,7 @@ export default function MainScreen() {
 
   // Audio Logic
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (isRecording) {
       interval = setInterval(() => {
         setRecordDuration(prev => {
@@ -169,6 +169,13 @@ export default function MainScreen() {
     if (!audioBase64) return;
     
     try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
       if (sound) {
         if (isPlayingVN) {
           await sound.pauseAsync();
