@@ -438,39 +438,6 @@ export default function MainScreen() {
             )}
           </View>
 
-          {/* Voice Note */}
-          <View style={s.field}>
-            <Text style={s.label}>Voice Note (Maks 10 Detik) <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
-            {audioBase64 ? (
-              <View style={[s.locationPreview, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}>
-                <View style={s.locationInfo}>
-                  <Ionicons name="mic" size={20} color="#8B5CF6" />
-                  <Text style={[s.locationText, { color: '#6D28D9' }]}>Rekaman tersimpan (Siap kirim)</Text>
-                </View>
-                <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setAudioBase64(null)}>
-                  <Ionicons name="trash" size={20} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity 
-                style={[s.locationBtn, { backgroundColor: isRecording ? '#FEF2F2' : '#F8FAFC', borderColor: isRecording ? '#FECACA' : '#F1F5F9' }]} 
-                onPress={isRecording ? stopRecording : startRecording} 
-                activeOpacity={0.7}
-              >
-                {isRecording ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="stop-circle" size={20} color="#EF4444" />
-                    <Text style={[s.locationBtnText, { color: '#EF4444', marginLeft: 8 }]}>Merekam... {recordDuration}d / 10d (Ketuk untuk Stop)</Text>
-                  </View>
-                ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="mic-outline" size={20} color="#8B5CF6" />
-                    <Text style={[s.locationBtnText, { color: '#8B5CF6', marginLeft: 8 }]}>Ketuk untuk merekam suara</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
 
         </View>
 
