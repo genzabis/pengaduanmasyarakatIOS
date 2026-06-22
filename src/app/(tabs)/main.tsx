@@ -572,7 +572,7 @@ export default function MainScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  scroll: { padding: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
   header: { marginBottom: 20 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
   headerSub: { fontSize: 14, color: '#64748B' },
