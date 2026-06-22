@@ -20,6 +20,7 @@ const KATEGORI_LIST = [
 ];
 
 export default function MainScreen() {
+  const [laporMode, setLaporMode] = useState<'text' | 'voice'>('text');
   const [nama, setNama] = useState('');
   const [judul, setJudul] = useState('');
   const [kategori, setKategori] = useState('');
@@ -153,35 +154,81 @@ export default function MainScreen() {
   };
 
   const simpanPengaduan = async () => {
-    if (!nama || !judul || !isi || !kategori) {
-      Alert.alert('Data Belum Lengkap', 'Harap lengkapi semua data laporan termasuk kategori.');
+    if (!nama || !kategori) {
+      Alert.alert('Data Belum Lengkap', 'Harap lengkapi nama pelapor dan kategori.');
       return;
     }
+    if (!imageBase64) {
+      Alert.alert('Foto Bukti Wajib', 'Harap lampirkan foto bukti kejadian agar laporan dapat divalidasi.');
+      return;
+    }
+    if (!location) {
+      Alert.alert('Lokasi Wajib', 'Harap ambil lokasi GPS saat ini agar petugas mengetahui titik kejadian.');
+      return;
+    }
+
+    let finalJudul = judul;
+    let finalIsi = isi;
+
+    if (laporMode === 'text') {
+      if (!judul || !isi) {
+        Alert.alert('Data Belum Lengkap', 'Harap isi Judul Laporan dan Rincian Kejadian.');
+        return;
+      }
+    } else {
+      finalJudul = `Laporan Suara oleh ${nama}`;
+      finalIsi = 'Laporan ini disampaikan melalui Rekaman Suara (Voice Note).';
+    }
+
     setLoading(true);
+    
+    // Auto-stop recording if still active when submitting
+    let finalAudioBase64 = audioBase64;
+    if (isRecording && recording) {
+      setIsRecording(false);
+      try {
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        if (uri) {
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          finalAudioBase64 = `data:audio/m4a;base64,${base64}`;
+          setAudioBase64(finalAudioBase64);
+        }
+      } catch (e) {}
+      setRecording(null);
+    }
+
     try {
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Koneksi lambat atau file terlalu besar. Silakan coba lagi.")), 15000)
       );
+
+      if (laporMode === 'voice' && !finalAudioBase64) {
+        Alert.alert('Voice Note Kosong', 'Harap rekam pesan suara Anda terlebih dahulu.');
+        setLoading(false);
+        return;
+      }
 
       const uploadTask = async () => {
         const newPengaduanRef = push(ref(database, 'pengaduan'));
         await set(newPengaduanRef, {
           nama,
           kategori,
-          judul,
-          isi,
+          judul: finalJudul,
+          isi: finalIsi,
           ...(imageBase64 ? { imageUrl: imageBase64 } : {}),
           ...(location ? { location } : {}),
-          ...(audioBase64 ? { audioBase64 } : {}),
+          ...(finalAudioBase64 ? { audioBase64: finalAudioBase64 } : {}),
           tanggal: Date.now(),
-          status: 'Menunggu'
+          status: 'Menunggu',
+          laporMode
         });
 
         const adminNotifRef = push(ref(database, 'notifications'));
         await set(adminNotifRef, {
           userId: 'admin@gmail.com',
           title: 'Laporan Baru Masuk 🔔',
-          message: `Laporan "${judul}" baru saja dikirimkan oleh ${nama}.`,
+          message: `Laporan "${finalJudul}" baru saja dikirimkan oleh ${nama}.`,
           time: Date.now(),
           type: 'info',
           read: false
@@ -214,6 +261,26 @@ export default function MainScreen() {
         <View style={s.header}>
           <Text style={s.headerTitle}>Buat Laporan</Text>
           <Text style={s.headerSub}>Isi formulir di bawah untuk menyampaikan pengaduan Anda.</Text>
+        </View>
+
+        {/* Mode Selector */}
+        <View style={s.modeSelector}>
+          <TouchableOpacity 
+            style={[s.modeBtn, laporMode === 'text' && s.modeBtnActive]} 
+            onPress={() => setLaporMode('text')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="document-text" size={16} color={laporMode === 'text' ? '#2563EB' : '#94A3B8'} style={{ marginRight: 6 }} />
+            <Text style={[s.modeText, laporMode === 'text' && s.modeTextActive]}>Tulis Laporan</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[s.modeBtn, laporMode === 'voice' && s.modeBtnActive]} 
+            onPress={() => setLaporMode('voice')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="mic" size={16} color={laporMode === 'voice' ? '#2563EB' : '#94A3B8'} style={{ marginRight: 6 }} />
+            <Text style={[s.modeText, laporMode === 'voice' && s.modeTextActive]}>Rekam Laporan</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Form */}
@@ -253,41 +320,82 @@ export default function MainScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Judul */}
-          <View style={s.field}>
-            <Text style={s.label}>Judul Laporan</Text>
-            <View style={s.inputRow}>
-              <Ionicons name="document-text-outline" size={18} color="#94A3B8" style={s.inputIcon} />
-              <TextInput 
-                style={s.input} 
-                placeholder="Topik singkat pengaduan" 
-                value={judul} 
-                onChangeText={setJudul} 
-                placeholderTextColor="#CBD5E1"
-              />
-            </View>
-          </View>
+          {laporMode === 'text' ? (
+            <>
+              {/* Judul */}
+              <View style={s.field}>
+                <Text style={s.label}>Judul Laporan</Text>
+                <View style={s.inputRow}>
+                  <Ionicons name="document-text-outline" size={18} color="#94A3B8" style={s.inputIcon} />
+                  <TextInput 
+                    style={s.input} 
+                    placeholder="Topik singkat pengaduan" 
+                    value={judul} 
+                    onChangeText={setJudul} 
+                    placeholderTextColor="#CBD5E1"
+                  />
+                </View>
+              </View>
 
-          {/* Isi */}
-          <View style={s.field}>
-            <Text style={s.label}>Rincian Kejadian</Text>
-            <View style={s.textAreaWrap}>
-              <TextInput 
-                style={s.textArea} 
-                placeholder="Uraikan detail kejadian, lokasi, dan waktu selengkap mungkin..." 
-                value={isi} 
-                onChangeText={setIsi} 
-                multiline 
-                numberOfLines={5}
-                placeholderTextColor="#CBD5E1"
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
+              {/* Isi */}
+              <View style={s.field}>
+                <Text style={s.label}>Rincian Kejadian</Text>
+                <View style={s.textAreaWrap}>
+                  <TextInput 
+                    style={s.textArea} 
+                    placeholder="Uraikan detail kejadian, lokasi, dan waktu selengkap mungkin..." 
+                    value={isi} 
+                    onChangeText={setIsi} 
+                    multiline 
+                    numberOfLines={5}
+                    placeholderTextColor="#CBD5E1"
+                    textAlignVertical="top"
+                  />
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Voice Note */}
+              <View style={s.field}>
+                <Text style={s.label}>Rekam Laporan (Maks 10 Detik)</Text>
+                {audioBase64 ? (
+                  <View style={[s.locationPreview, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}>
+                    <View style={s.locationInfo}>
+                      <Ionicons name="mic" size={20} color="#8B5CF6" />
+                      <Text style={[s.locationText, { color: '#6D28D9' }]}>Rekaman tersimpan (Siap kirim)</Text>
+                    </View>
+                    <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setAudioBase64(null)}>
+                      <Ionicons name="trash" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity 
+                    style={[s.locationBtn, { backgroundColor: isRecording ? '#FEF2F2' : '#F8FAFC', borderColor: isRecording ? '#FECACA' : '#F1F5F9', paddingVertical: 20 }]} 
+                    onPress={isRecording ? stopRecording : startRecording} 
+                    activeOpacity={0.7}
+                  >
+                    {isRecording ? (
+                      <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                        <Ionicons name="stop-circle" size={40} color="#EF4444" />
+                        <Text style={[s.locationBtnText, { color: '#EF4444', marginTop: 8 }]}>Merekam... {recordDuration}d / 10d</Text>
+                        <Text style={{ color: '#F87171', fontSize: 12, marginTop: 4 }}>Ketuk untuk Berhenti</Text>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                        <Ionicons name="mic-outline" size={40} color="#8B5CF6" />
+                        <Text style={[s.locationBtnText, { color: '#8B5CF6', marginTop: 8 }]}>Ketuk untuk Mulai Merekam Suara</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          )}
 
           {/* Foto */}
           <View style={s.field}>
-            <Text style={s.label}>Foto Bukti <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
+            <Text style={s.label}>Foto Bukti <Text style={{ fontWeight: '400', color: '#EF4444' }}>(Wajib)</Text></Text>
             {imageBase64 ? (
               <View style={s.imagePreview}>
                 <Image source={{ uri: imageBase64 }} style={s.imagePreviewImg} />
@@ -311,7 +419,7 @@ export default function MainScreen() {
 
           {/* Lokasi */}
           <View style={s.field}>
-            <Text style={s.label}>Lokasi Kejadian (GPS) <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
+            <Text style={s.label}>Lokasi Kejadian (GPS) <Text style={{ fontWeight: '400', color: '#EF4444' }}>(Wajib)</Text></Text>
             {location ? (
               <View style={s.locationPreview}>
                 <View style={s.locationInfo}>
@@ -418,25 +526,23 @@ export default function MainScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scroll: { paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 36 : 16, paddingBottom: 100 },
-
-  // Header
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  scroll: { padding: 20 },
   header: { marginBottom: 20 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
-  headerSub: { fontSize: 14, color: '#94A3B8', lineHeight: 20 },
-
-  // Form Card
-  formCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 16 },
-
-  // Field
-  field: { marginBottom: 14 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
+  headerSub: { fontSize: 14, color: '#64748B' },
+  modeSelector: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4, marginBottom: 20 },
+  modeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 8 },
+  modeBtnActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  modeText: { fontSize: 14, fontWeight: '600', color: '#94A3B8' },
+  modeTextActive: { color: '#2563EB' },
+  formCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 15, elevation: 3, marginBottom: 24 },
+  field: { marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, minHeight: 50, borderWidth: 1, borderColor: '#F1F5F9' },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: '#0F172A', paddingVertical: 0 },
   catMini: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-
   // Text Area
   textAreaWrap: { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', padding: 12 },
   textArea: { fontSize: 15, color: '#0F172A', minHeight: 100, textAlignVertical: 'top', lineHeight: 22 },
