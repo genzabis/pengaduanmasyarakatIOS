@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { auth, database } from '../../../firebaseConfig';
 import { ref, push, set } from 'firebase/database';
 import { Colors } from '../../constants/Colors';
@@ -25,6 +27,13 @@ export default function MainScreen() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
+  
+  // Audio state
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBase64, setAudioBase64] = useState<string | null>(null);
+  const [recordDuration, setRecordDuration] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const router = useRouter();
@@ -89,6 +98,60 @@ export default function MainScreen() {
     setGettingLocation(false);
   };
 
+  // Audio Logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording) {
+      interval = setInterval(() => {
+        setRecordDuration(prev => {
+          if (prev >= 10) {
+            stopRecording();
+            return 10;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } else {
+      setRecordDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Izin Ditolak', 'Harap izinkan akses mikrofon untuk merekam suara.');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(recording);
+      setIsRecording(true);
+      setRecordDuration(0);
+    } catch (err) {
+      Alert.alert('Gagal merekam', 'Gagal memulai rekaman suara');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+    setIsRecording(false);
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      if (uri) {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        setAudioBase64(`data:audio/m4a;base64,${base64}`);
+      }
+    } catch (e) {}
+    setRecording(null);
+  };
+
   const simpanPengaduan = async () => {
     if (!nama || !judul || !isi || !kategori) {
       Alert.alert('Data Belum Lengkap', 'Harap lengkapi semua data laporan termasuk kategori.');
@@ -109,6 +172,7 @@ export default function MainScreen() {
           isi,
           ...(imageBase64 ? { imageUrl: imageBase64 } : {}),
           ...(location ? { location } : {}),
+          ...(audioBase64 ? { audioBase64 } : {}),
           tanggal: Date.now(),
           status: 'Menunggu'
         });
@@ -131,6 +195,7 @@ export default function MainScreen() {
       setIsi('');
       setImageBase64(null);
       setLocation(null);
+      setAudioBase64(null);
       router.push('/result');
     } catch (error: any) {
       Alert.alert('Gagal mengirim', error.message);
@@ -261,6 +326,40 @@ export default function MainScreen() {
               <TouchableOpacity style={s.locationBtn} onPress={getLocation} disabled={gettingLocation} activeOpacity={0.7}>
                 {gettingLocation ? <ActivityIndicator size="small" color="#3B82F6" /> : <Ionicons name="location-outline" size={20} color="#3B82F6" />}
                 <Text style={s.locationBtnText}>{gettingLocation ? 'Mengambil titik GPS...' : 'Ambil Lokasi Saat Ini'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Voice Note */}
+          <View style={s.field}>
+            <Text style={s.label}>Voice Note (Maks 10 Detik) <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
+            {audioBase64 ? (
+              <View style={[s.locationPreview, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}>
+                <View style={s.locationInfo}>
+                  <Ionicons name="mic" size={20} color="#8B5CF6" />
+                  <Text style={[s.locationText, { color: '#6D28D9' }]}>Rekaman tersimpan (Siap kirim)</Text>
+                </View>
+                <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setAudioBase64(null)}>
+                  <Ionicons name="trash" size={20} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={[s.locationBtn, { backgroundColor: isRecording ? '#FEF2F2' : '#F8FAFC', borderColor: isRecording ? '#FECACA' : '#F1F5F9' }]} 
+                onPress={isRecording ? stopRecording : startRecording} 
+                activeOpacity={0.7}
+              >
+                {isRecording ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="stop-circle" size={20} color="#EF4444" />
+                    <Text style={[s.locationBtnText, { color: '#EF4444', marginLeft: 8 }]}>Merekam... {recordDuration}d / 10d (Ketuk untuk Stop)</Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="mic-outline" size={20} color="#8B5CF6" />
+                    <Text style={[s.locationBtnText, { color: '#8B5CF6', marginLeft: 8 }]}>Ketuk untuk merekam suara</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             )}
           </View>

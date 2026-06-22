@@ -29,6 +29,10 @@ export default function ReportDetailScreen() {
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, {type: 'me' | 'everyone', timeoutId: any}>>({});
   
+  // Voice Note Playback State
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingVN, setIsPlayingVN] = useState(false);
+
   const isAdmin = auth.currentUser?.email === 'admin@gmail.com';
 
   const isDark = false;
@@ -89,6 +93,54 @@ export default function ReportDetailScreen() {
       unsubscribeMsg();
     };
   }, [id]);
+
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
+  const togglePlayVN = async () => {
+    if (!report?.audioBase64) return;
+    
+    try {
+      if (sound) {
+        if (isPlayingVN) {
+          await sound.pauseAsync();
+          setIsPlayingVN(false);
+        } else {
+          await sound.playAsync();
+          setIsPlayingVN(true);
+        }
+      } else {
+        // Write base64 to temp file to play
+        const base64Data = report.audioBase64.split(',')[1];
+        if (!base64Data) return;
+        
+        const tempUri = FileSystem.cacheDirectory + 'temp_report_vn.m4a';
+        await FileSystem.writeAsStringAsync(tempUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+        
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: tempUri },
+          { shouldPlay: true }
+        );
+        
+        newSound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) {
+            setIsPlayingVN(false);
+            newSound.setPositionAsync(0);
+          }
+        });
+        
+        setSound(newSound);
+        setIsPlayingVN(true);
+      }
+    } catch (error) {
+      console.log('Error playing VN:', error);
+    }
+  };
 
   useEffect(() => {
     if (!messages.length || !auth.currentUser) return;
@@ -625,6 +677,28 @@ export default function ReportDetailScreen() {
                   >
                     <Text style={styles.locationBtnText}>Buka Maps</Text>
                     <Ionicons name="open-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {report.audioBase64 && (
+              <View style={styles.locationContainer}>
+                <Text style={[styles.descLabel, { color: theme.textSecondary }]}>BUKTI REKAMAN SUARA</Text>
+                <View style={[styles.locationCard, { backgroundColor: isDark ? '#4C1D95' : '#F5F3FF', borderColor: isDark ? '#5B21B6' : '#EDE9FE' }]}>
+                  <View style={styles.locationInfo}>
+                    <Ionicons name="mic" size={24} color="#8B5CF6" />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={[styles.locationText, { color: isDark ? '#C4B5FD' : '#6D28D9' }]}>Voice Note Warga</Text>
+                      <Text style={[styles.locationSubText, { color: isDark ? '#DDD6FE' : '#8B5CF6' }]}>Audio berdurasi singkat</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.locationBtn, { backgroundColor: isDark ? '#5B21B6' : '#8B5CF6' }]} 
+                    onPress={togglePlayVN}
+                  >
+                    <Text style={styles.locationBtnText}>{isPlayingVN ? 'Stop' : 'Play'}</Text>
+                    <Ionicons name={isPlayingVN ? "stop" : "play"} size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
                   </TouchableOpacity>
                 </View>
               </View>

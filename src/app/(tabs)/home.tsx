@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const [unreadNotif, setUnreadNotif] = useState(0);
   const [announcement, setAnnouncement] = useState<any>(null);
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<string[]>([]);
+  const [newsList, setNewsList] = useState<any[]>([]);
 
   const theme = Colors.light;
 
@@ -92,7 +93,18 @@ export default function HomeScreen() {
       }
     });
 
-    return () => { unsubscribe(); unsubAnn(); };
+    const newsRef = ref(database, 'news');
+    const unsubNews = onValue(newsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+        setNewsList(list.sort((a, b) => b.timestamp - a.timestamp));
+      } else {
+        setNewsList([]);
+      }
+    });
+
+    return () => { unsubscribe(); unsubAnn(); unsubNews(); };
   }, []);
 
   const getStatusStyle = (status: string) => {
@@ -239,6 +251,35 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* Portal Berita (Admin View) */}
+          {newsList.length > 0 && (
+            <>
+              <View style={[s.sectionRow, { marginTop: 16 }]}>
+                <Text style={s.sectionTitle}>Berita & Informasi</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.newsScroll}>
+                {newsList.map(news => (
+                  <TouchableOpacity key={news.id} style={s.newsCard} activeOpacity={0.8} onPress={() => router.push(`/news/${news.id}`)}>
+                    {news.imageUrl ? (
+                      <Image source={{ uri: news.imageUrl }} style={s.newsImage} />
+                    ) : (
+                      <View style={[s.newsImage, { backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="newspaper-outline" size={32} color="#CBD5E1" />
+                      </View>
+                    )}
+                    <View style={s.newsContent}>
+                      <Text style={s.newsTitle} numberOfLines={2}>{news.title}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Ionicons name="time-outline" size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                        <Text style={s.newsDate}>{new Date(news.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
           <View style={{ height: 30 }} />
         </ScrollView>
       </SafeAreaView>
@@ -373,6 +414,35 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Portal Berita */}
+        {newsList.length > 0 && (
+          <>
+            <View style={[s.sectionRow, { marginTop: 8 }]}>
+              <Text style={s.sectionTitle}>Berita & Informasi</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.newsScroll}>
+              {newsList.map(news => (
+                <TouchableOpacity key={news.id} style={s.newsCard} activeOpacity={0.8} onPress={() => router.push(`/news/${news.id}`)}>
+                  {news.imageUrl ? (
+                    <Image source={{ uri: news.imageUrl }} style={s.newsImage} />
+                  ) : (
+                    <View style={[s.newsImage, { backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="newspaper-outline" size={32} color="#CBD5E1" />
+                    </View>
+                  )}
+                  <View style={s.newsContent}>
+                    <Text style={s.newsTitle} numberOfLines={2}>{news.title}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                      <Ionicons name="time-outline" size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                      <Text style={s.newsDate}>{new Date(news.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
         <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
@@ -452,8 +522,14 @@ const s = StyleSheet.create({
   // Status Chip
   statusChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusChipText: { fontSize: 11, fontWeight: '700' },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1, borderColor: '#F1F5F9', borderStyle: 'dashed' },
+  emptyText: { color: '#94A3B8', fontSize: 14, fontWeight: '500', marginTop: 12 },
 
-  // Empty
-  emptyState: { alignItems: 'center', paddingVertical: 28, backgroundColor: '#FAFAFA', borderRadius: 14, borderWidth: 1, borderColor: '#F1F5F9', borderStyle: 'dashed' },
-  emptyText: { fontSize: 13, color: '#94A3B8', fontWeight: '500', marginTop: 6 },
+  // News Carousel
+  newsScroll: { gap: 16, paddingRight: 20 },
+  newsCard: { width: Dimensions.get('window').width * 0.65, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  newsImage: { width: '100%', height: 120, resizeMode: 'cover' },
+  newsContent: { padding: 12 },
+  newsTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A', lineHeight: 20 },
+  newsDate: { fontSize: 11, color: '#94A3B8', fontWeight: '500' }
 });

@@ -15,6 +15,9 @@
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/app_logo.png"
       },
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {

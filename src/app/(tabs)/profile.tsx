@@ -247,6 +247,19 @@ export default function ProfileScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
               </TouchableOpacity>
+              
+              <View style={styles.divider} />
+
+              <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={() => router.push('/admin/news')}>
+                <View style={[styles.settingIconBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', borderWidth: 1 }]}>
+                  <Ionicons name="newspaper" size={18} color="#16A34A" />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Kelola Portal Berita</Text>
+                  <Text style={styles.settingDesc}>Tulis artikel dan info warga terbaru</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              </TouchableOpacity>
             </View>
           </>
         )}
