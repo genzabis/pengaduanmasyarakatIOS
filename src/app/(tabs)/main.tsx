@@ -34,6 +34,10 @@ export default function MainScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBase64, setAudioBase64] = useState<string | null>(null);
   const [recordDuration, setRecordDuration] = useState(0);
+  
+  // Audio playback state
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingVN, setIsPlayingVN] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -153,6 +157,53 @@ export default function MainScreen() {
     setRecording(null);
   };
 
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
+
+  const togglePlayVN = async () => {
+    if (!audioBase64) return;
+    
+    try {
+      if (sound) {
+        if (isPlayingVN) {
+          await sound.pauseAsync();
+          setIsPlayingVN(false);
+        } else {
+          await sound.playAsync();
+          setIsPlayingVN(true);
+        }
+      } else {
+        const base64Data = audioBase64.split(',')[1];
+        if (!base64Data) return;
+        
+        const tempUri = FileSystem.cacheDirectory + 'temp_preview_vn.m4a';
+        await FileSystem.writeAsStringAsync(tempUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+        
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: tempUri },
+          { shouldPlay: true }
+        );
+        
+        newSound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status.didJustFinish) {
+            setIsPlayingVN(false);
+            newSound.setPositionAsync(0);
+          }
+        });
+        
+        setSound(newSound);
+        setIsPlayingVN(true);
+      }
+    } catch (error) {
+      console.log('Error playing VN:', error);
+    }
+  };
+
   const simpanPengaduan = async () => {
     if (!nama || !kategori) {
       Alert.alert('Data Belum Lengkap', 'Harap lengkapi nama pelapor dan kategori.');
@@ -243,6 +294,11 @@ export default function MainScreen() {
       setImageBase64(null);
       setLocation(null);
       setAudioBase64(null);
+      if (sound) {
+        sound.unloadAsync();
+        setSound(null);
+        setIsPlayingVN(false);
+      }
       router.push('/result');
     } catch (error: any) {
       Alert.alert('Gagal mengirim', error.message);
@@ -360,14 +416,29 @@ export default function MainScreen() {
               <View style={s.field}>
                 <Text style={s.label}>Rekam Laporan (Maks 10 Detik)</Text>
                 {audioBase64 ? (
-                  <View style={[s.locationPreview, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}>
-                    <View style={s.locationInfo}>
+                  <View style={[s.locationPreview, { borderColor: '#8B5CF6', backgroundColor: '#F5F3FF', flexDirection: 'column', alignItems: 'stretch' }]}>
+                    <View style={[s.locationInfo, { marginBottom: 12 }]}>
                       <Ionicons name="mic" size={20} color="#8B5CF6" />
                       <Text style={[s.locationText, { color: '#6D28D9' }]}>Rekaman tersimpan (Siap kirim)</Text>
                     </View>
-                    <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setAudioBase64(null)}>
-                      <Ionicons name="trash" size={20} color="#EF4444" />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                      <TouchableOpacity 
+                        style={{ flex: 1, backgroundColor: '#8B5CF6', padding: 12, borderRadius: 8, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }} 
+                        onPress={togglePlayVN}
+                      >
+                        <Text style={{ color: '#FFF', fontWeight: 'bold', marginRight: 8 }}>{isPlayingVN ? 'Stop Preview' : 'Play Preview'}</Text>
+                        <Ionicons name={isPlayingVN ? "stop" : "play"} size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={{ backgroundColor: '#FEE2E2', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }} 
+                        onPress={() => {
+                          setAudioBase64(null);
+                          if (sound) { sound.unloadAsync(); setSound(null); setIsPlayingVN(false); }
+                        }}
+                      >
+                        <Ionicons name="trash" size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : (
                   <TouchableOpacity 
