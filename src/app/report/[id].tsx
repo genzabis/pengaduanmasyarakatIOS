@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, SafeAreaView, Platform, Modal, Pressable, Alert, TextInput, KeyboardAvoidingView, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Modal, Pressable, Alert, TextInput, KeyboardAvoidingView, Animated, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, database, storage } from '../../../firebaseConfig';
+import { auth, database } from '../../../firebaseConfig';
 import { ref, onValue, update, push, set } from 'firebase/database';
 import { Audio } from 'expo-av';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -21,7 +24,38 @@ export default function ReportDetailScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingVN, setUploadingVN] = useState(false);
+  const [selectedMessageForAction, setSelectedMessageForAction] = useState<any>(null);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [pendingDeletes, setPendingDeletes] = useState<Record<string, {type: 'me' | 'everyone', timeoutId: any}>>({});
+  
   const isAdmin = auth.currentUser?.email === 'admin@gmail.com';
+
+  const CUSTOM_LOW_QUALITY_M4A = {
+    isMeteringEnabled: true,
+    android: {
+      extension: '.m4a',
+      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+      audioEncoder: Audio.AndroidAudioEncoder.AAC,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 16000,
+    },
+    ios: {
+      extension: '.m4a',
+      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+      audioQuality: Audio.IOSAudioQuality.LOW,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 16000,
+      linearPCMBitDepth: 16,
+      linearPCMIsBigEndian: false,
+      linearPCMIsFloat: false,
+    },
+    web: {
+      mimeType: 'audio/mp4',
+      bitsPerSecond: 16000,
+    },
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -52,6 +86,15 @@ export default function ReportDetailScreen() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!messages.length || !auth.currentUser) return;
+    messages.forEach(msg => {
+      if (msg.senderEmail !== auth.currentUser?.email && !msg.read) {
+        update(ref(database, `pengaduan/${id}/messages/${msg.id}`), { read: true });
+      }
+    });
+  }, [messages, id]);
+
   const handleSaveStatus = async () => {
     if (!report || !selectedStatus) return;
     setModalVisible(false);
@@ -76,8 +119,296 @@ export default function ReportDetailScreen() {
         type: notifType,
         read: false
       });
-    } catch (error) {
-      Alert.alert('Gagal', 'Gagal memperbarui status');
+    } catch (e) {
+      console.log('Update status error', e);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!report) return;
+    try {
+      const getStatusClass = (status: string) => {
+        if (status === 'Selesai') return 'status-selesai';
+        if (status === 'Diproses') return 'status-diproses';
+        return 'status-menunggu';
+      };
+
+      const htmlContent = `
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Bukti Laporan Pengaduan</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      color: #222;
+      line-height: 1.5;
+    }
+    .kop-surat {
+      text-align: center;
+      border-bottom: 3px solid #000;
+      padding-bottom: 5px;
+      margin-bottom: 5px;
+    }
+    .kop-surat-inner {
+      border-bottom: 1px solid #000;
+      padding-bottom: 15px;
+      margin-bottom: 30px;
+    }
+    .instansi {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #000;
+    }
+    .alamat {
+      font-size: 13px;
+      margin: 5px 0 0 0;
+      color: #444;
+    }
+    h2.title {
+      text-align: center;
+      font-size: 16px;
+      text-transform: uppercase;
+      margin: 20px 0 30px 0;
+      text-decoration: underline;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    td {
+      padding: 8px 0;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    .label-cell {
+      width: 160px;
+      font-weight: bold;
+    }
+    .colon-cell {
+      width: 20px;
+      text-align: center;
+    }
+    .value-cell {
+      padding-left: 10px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 12px;
+      color: #fff;
+    }
+    .status-selesai { background-color: #16A34A; }
+    .status-diproses { background-color: #2563EB; }
+    .status-menunggu { background-color: #CA8A04; }
+    
+    .box-content {
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-top: 8px;
+      border-radius: 4px;
+      background-color: #fafafa;
+      min-height: 60px;
+      font-size: 14px;
+    }
+    .tanggapan-box {
+      background-color: #f0f9ff;
+      border-color: #bae6fd;
+    }
+    .image-container {
+      margin-top: 10px;
+      text-align: center;
+      border: 1px dashed #ccc;
+      padding: 10px;
+    }
+    .image-container img {
+      max-width: 100%;
+      max-height: 350px;
+      object-fit: contain;
+    }
+    .footer {
+      margin-top: 50px;
+      width: 100%;
+      page-break-inside: avoid;
+    }
+    .ttd-container {
+      float: right;
+      text-align: center;
+      width: 250px;
+    }
+    .ttd-title {
+      margin-bottom: 70px;
+      font-size: 14px;
+    }
+    .ttd-name {
+      font-weight: bold;
+      text-decoration: underline;
+      font-size: 14px;
+    }
+    .clear { clear: both; }
+    .system-note {
+      margin-top: 60px;
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="kop-surat">
+    <div class="kop-surat-inner">
+      <h1 class="instansi">PLATFORM LAPOR WARGA</h1>
+      <p class="alamat">Layanan Pengaduan dan Aspirasi Masyarakat Secara Elektronik<br>Dokumen Resmi Tercetak</p>
+    </div>
+  </div>
+
+  <h2 class="title">Tanda Bukti Laporan Pengaduan</h2>
+
+  <table>
+    <tr>
+      <td class="label-cell">Nomor Registrasi</td>
+      <td class="colon-cell">:</td>
+      <td class="value-cell"><strong>${report.id}</strong></td>
+    </tr>
+    <tr>
+      <td class="label-cell">Tanggal Laporan</td>
+      <td class="colon-cell">:</td>
+      <td class="value-cell">${new Date(report.tanggal).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Nama Pelapor</td>
+      <td class="colon-cell">:</td>
+      <td class="value-cell">${report.nama}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Kategori Pengaduan</td>
+      <td class="colon-cell">:</td>
+      <td class="value-cell">${report.kategori || '-'}</td>
+    </tr>
+    <tr>
+      <td class="label-cell">Status Saat Ini</td>
+      <td class="colon-cell">:</td>
+      <td class="value-cell">
+        <span class="status-badge ${getStatusClass(report.status)}">${report.status}</span>
+      </td>
+    </tr>
+  </table>
+
+  <div style="margin-top: 20px;">
+    <strong style="font-size: 14px;">Judul Laporan:</strong><br>
+    <div style="font-size: 16px; margin-top: 5px; font-weight: bold;">${report.judul}</div>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <strong style="font-size: 14px;">Rincian Laporan:</strong><br>
+    <div class="box-content">
+      ${report.isi ? report.isi.replace(/\\n/g, '<br/>') : '-'}
+    </div>
+  </div>
+
+  ${report.tanggapan ? `<div style="margin-top: 20px;"><strong style="font-size: 14px;">Tanggapan Petugas:</strong><br><div class="box-content tanggapan-box">${report.tanggapan.replace(/\\n/g, '<br/>')}</div></div>` : ''}
+
+  ${report.imageUrl ? `<div style="margin-top: 20px;"><strong style="font-size: 14px;">Lampiran Foto Bukti:</strong><br><div class="image-container"><img src="${report.imageUrl}" /></div></div>` : ''}
+
+  <div class="footer">
+    <div class="ttd-container">
+      <div class="ttd-title">Dikeluarkan pada:<br>${new Date().toLocaleDateString('id-ID', { dateStyle: 'long' })}</div>
+      <div class="ttd-name">Sistem Lapor Warga</div>
+      <div>(Tervalidasi Otomatis)</div>
+    </div>
+    <div class="clear"></div>
+  </div>
+
+  <div class="system-note">
+    Dokumen ini adalah tanda bukti yang sah yang diterbitkan oleh sistem elektronik Lapor Warga.<br>
+    Harap simpan dokumen ini sebagai referensi pelaporan Anda.
+  </div>
+</body>
+</html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf', dialogTitle: 'Simpan Bukti Laporan' });
+    } catch (e) {
+      console.log('PDF Error', e);
+    }
+  };
+
+  const handleDeleteForMe = () => {
+    if (!selectedMessageForAction) return;
+    const msg = selectedMessageForAction;
+    setActionModalVisible(false);
+    
+    const timeoutId = setTimeout(async () => {
+      try {
+        const deletedFor = msg.deletedFor || [];
+        if (!deletedFor.includes(auth.currentUser?.email)) {
+          deletedFor.push(auth.currentUser?.email);
+          await update(ref(database, `pengaduan/${id}/messages/${msg.id}`), { deletedFor });
+        }
+      } catch (e) {
+        console.error('Delete for me error:', e);
+      }
+      setPendingDeletes(prev => {
+        const newDels = {...prev};
+        delete newDels[msg.id];
+        return newDels;
+      });
+    }, 5000);
+
+    setPendingDeletes(prev => ({
+      ...prev,
+      [msg.id]: { type: 'me', timeoutId }
+    }));
+  };
+
+  const handleDeleteForEveryone = () => {
+    if (!selectedMessageForAction) return;
+    const msg = selectedMessageForAction;
+    setActionModalVisible(false);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await update(ref(database, `pengaduan/${id}/messages/${msg.id}`), { 
+          isDeletedForEveryone: true,
+          text: '',
+          audioUrl: null
+        });
+      } catch (e) {
+        console.error('Delete for everyone error:', e);
+      }
+      setPendingDeletes(prev => {
+        const newDels = {...prev};
+        delete newDels[msg.id];
+        return newDels;
+      });
+    }, 5000);
+
+    setPendingDeletes(prev => ({
+      ...prev,
+      [msg.id]: { type: 'everyone', timeoutId }
+    }));
+  };
+
+  const handleUndo = (msgId: string) => {
+    const pending = pendingDeletes[msgId];
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      setPendingDeletes(prev => {
+        const newDels = {...prev};
+        delete newDels[msgId];
+        return newDels;
+      });
     }
   };
 
@@ -88,20 +419,28 @@ export default function ReportDetailScreen() {
       text: newMessage.trim(),
       senderEmail: auth.currentUser.email,
       isAdmin: isAdmin,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      read: false
     });
     setNewMessage('');
   };
 
   const startRecording = async () => {
     try {
+      if (recording) {
+        try {
+          await recording.stopAndUnloadAsync();
+        } catch (e) {}
+        setRecording(null);
+      }
+      
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status === 'granted') {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
         });
-        const { recording: newRec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        const { recording: newRec } = await Audio.Recording.createAsync(CUSTOM_LOW_QUALITY_M4A);
         setRecording(newRec);
         setIsRecording(true);
       } else {
@@ -131,24 +470,25 @@ export default function ReportDetailScreen() {
     if (!auth.currentUser) return;
     setUploadingVN(true);
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const filename = `vn_${Date.now()}.m4a`;
-      const sRef = storageRef(storage, `voice_notes/${id}/${filename}`);
-      await uploadBytes(sRef, blob);
-      const downloadURL = await getDownloadURL(sRef);
+      const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+      const audioUrl = `data:audio/m4a;base64,${base64Audio}`;
 
       const msgRef = push(ref(database, `pengaduan/${id}/messages`));
       await set(msgRef, {
         text: '🎵 Pesan Suara',
-        audioUrl: downloadURL,
+        audioUrl: audioUrl,
         senderEmail: auth.currentUser.email,
         isAdmin: isAdmin,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        read: false
       });
-    } catch (err) {
-      Alert.alert('Gagal', 'Gagal mengunggah pesan suara.');
-      console.error(err);
+      
+      if (isAdmin && report?.status === 'Menunggu') {
+        update(ref(database, `pengaduan/${id}`), { status: 'Diproses' });
+      }
+    } catch (err: any) {
+      console.error('Upload VN Error:', err);
+      Alert.alert('Gagal', 'Tidak dapat mengirim voice note: ' + err.message);
     }
     setUploadingVN(false);
   };
@@ -192,13 +532,16 @@ export default function ReportDetailScreen() {
             <Ionicons name="arrow-back" size={20} color="#0F172A" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Detail Laporan</Text>
-          {isAdmin ? (
-            <TouchableOpacity style={styles.headerAdminBtn} onPress={() => setModalVisible(true)}>
-              <Text style={styles.headerAdminBtnText}>Kelola Status</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.iconBtn} onPress={handleExportPDF}>
+              <Ionicons name="download-outline" size={22} color="#0F172A" />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 60 }} />
-          )}
+            {isAdmin && (
+              <TouchableOpacity style={styles.headerAdminBtn} onPress={() => setModalVisible(true)}>
+                <Text style={styles.headerAdminBtnText}>Kelola Status</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <ScrollView 
@@ -236,6 +579,13 @@ export default function ReportDetailScreen() {
             
             <Text style={styles.descLabel}>DESKRIPSI</Text>
             <Text style={styles.description}>{report.isi}</Text>
+
+            {report.imageUrl && (
+              <View style={styles.proofImageContainer}>
+                <Text style={styles.descLabel}>FOTO BUKTI</Text>
+                <Image source={{ uri: report.imageUrl }} style={styles.proofImage} />
+              </View>
+            )}
 
             {report.tanggapan && (
               <View style={styles.adminTanggapanBox}>
@@ -301,8 +651,21 @@ export default function ReportDetailScreen() {
             <Text style={styles.emptyChatText}>Belum ada diskusi. Kirim pesan untuk bertanya ke petugas.</Text>
           ) : (
             messages.map(msg => {
+              if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser?.email)) return null;
+              if (pendingDeletes[msg.id]) return null;
+
               const isMe = msg.senderEmail === auth.currentUser?.email;
-              return <AnimatedChatBubble key={msg.id} msg={msg} isMe={isMe} />;
+              return (
+                <AnimatedChatBubble 
+                  key={msg.id} 
+                  msg={msg} 
+                  isMe={isMe} 
+                  onLongPress={() => {
+                    setSelectedMessageForAction(msg);
+                    setActionModalVisible(true);
+                  }}
+                />
+              );
             })
           )}
         </View>
@@ -399,6 +762,36 @@ export default function ReportDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Action Modal untuk Hapus */}
+      <Modal animationType="fade" transparent={true} visible={actionModalVisible} onRequestClose={() => setActionModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setActionModalVisible(false)} />
+          <View style={styles.actionModalContent}>
+            <TouchableOpacity style={styles.actionOption} onPress={handleDeleteForMe}>
+              <Ionicons name="trash-outline" size={20} color="#0F172A" />
+              <Text style={styles.actionOptionText}>Hapus untuk saya</Text>
+            </TouchableOpacity>
+            
+            {(selectedMessageForAction?.senderEmail === auth.currentUser?.email || isAdmin) && !selectedMessageForAction?.isDeletedForEveryone && (
+              <TouchableOpacity style={[styles.actionOption, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]} onPress={handleDeleteForEveryone}>
+                <Ionicons name="trash-bin-outline" size={20} color="#EF4444" />
+                <Text style={[styles.actionOptionText, { color: '#EF4444' }]}>Hapus untuk semua</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Snackbar Undo */}
+      {Object.keys(pendingDeletes).length > 0 && (
+        <View style={styles.snackbarContainer}>
+          <Text style={styles.snackbarText}>Pesan dihapus</Text>
+          <TouchableOpacity onPress={() => handleUndo(Object.keys(pendingDeletes)[0])}>
+            <Text style={styles.snackbarUndoText}>UNDO</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -421,6 +814,8 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
   headerTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minWidth: 60 },
+  iconBtn: { padding: 8, marginRight: 4, backgroundColor: '#F1F5F9', borderRadius: 20 },
   headerAdminBtn: { backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
   headerAdminBtnText: { color: '#2563EB', fontSize: 12, fontWeight: '700' },
   
@@ -452,6 +847,9 @@ const styles = StyleSheet.create({
   
   descLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginBottom: 8 },
   description: { fontSize: 15, color: '#475569', lineHeight: 24 },
+
+  proofImageContainer: { marginTop: 24 },
+  proofImage: { width: '100%', height: 200, borderRadius: 12, resizeMode: 'cover', borderWidth: 1, borderColor: '#E2E8F0' },
 
   adminTanggapanBox: {
     backgroundColor: '#F0F9FF',
@@ -610,10 +1008,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16
   },
-  saveModalBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 }
+  saveModalBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+
+  actionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 8,
+    marginHorizontal: 24,
+    marginBottom: Platform.OS === 'ios' ? 40 : 24,
+    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8
+  },
+  actionOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 24 },
+  actionOptionText: { fontSize: 16, color: '#0F172A', fontWeight: '500', marginLeft: 16 },
+  
+  snackbarContainer: {
+    position: 'absolute',
+    bottom: 90,
+    left: 24,
+    right: 24,
+    backgroundColor: '#334155',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6
+  },
+  snackbarText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  snackbarUndoText: { color: '#60A5FA', fontSize: 14, fontWeight: '700' },
 });
 
-const AnimatedChatBubble = ({ msg, isMe }: { msg: any, isMe: boolean }) => {
+const AnimatedChatBubble = ({ msg, isMe, onLongPress }: { msg: any, isMe: boolean, onLongPress: () => void }) => {
   const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
 
@@ -640,28 +1066,44 @@ const AnimatedChatBubble = ({ msg, isMe }: { msg: any, isMe: boolean }) => {
       { transform: [{ scale: scaleAnim }], opacity: opacityAnim }
     ]}>
       {!isMe && <Text style={styles.chatSenderName}>{msg.isAdmin ? 'Petugas Admin' : msg.senderEmail.split('@')[0]}</Text>}
-      <View style={[styles.chatBubble, isMe ? styles.chatBubbleMe : styles.chatBubbleThem]}>
+      <TouchableOpacity 
+        activeOpacity={0.8}
+        onLongPress={onLongPress}
+        style={[
+          styles.chatBubble, 
+          isMe ? styles.chatBubbleMe : styles.chatBubbleThem,
+          msg.isDeletedForEveryone ? { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' } : {}
+        ]}
+      >
         
-        {msg.audioUrl ? (
+        {msg.isDeletedForEveryone ? (
+          <Text style={[styles.chatText, { color: '#94A3B8', fontStyle: 'italic' }]}>
+            🚫 Pesan ini telah dihapus
+          </Text>
+        ) : msg.audioUrl ? (
           <AudioPlayer url={msg.audioUrl} isMe={isMe} />
         ) : (
           <Text style={[styles.chatText, isMe ? {color: '#FFF'} : {color: '#0F172A'}]}>{msg.text}</Text>
         )}
 
         <View style={styles.chatTimeContainer}>
-          <Text style={[styles.chatTime, isMe ? {color: 'rgba(255,255,255,0.8)'} : {color: '#94A3B8'}]}>
+          <Text style={[styles.chatTime, isMe && !msg.isDeletedForEveryone ? {color: 'rgba(255,255,255,0.8)'} : {color: '#94A3B8'}]}>
             {new Date(msg.timestamp).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
           </Text>
           {isMe && (
-            <Ionicons 
-              name="checkmark-done" 
-              size={14} 
-              color="#93C5FD" 
-              style={{ marginLeft: 4 }} 
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 6 }}>
+              <Text style={{fontSize: 9, color: msg.isDeletedForEveryone ? '#94A3B8' : 'rgba(255,255,255,0.8)', marginRight: 2}}>
+                {msg.read ? "Terlihat" : "Terkirim"}
+              </Text>
+              <Ionicons 
+                name={msg.read ? "checkmark-done" : "checkmark"} 
+                size={14} 
+                color={msg.read ? "#94A3B8" : "#93C5FD"} 
+              />
+            </View>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 };
@@ -677,23 +1119,34 @@ const AudioPlayer = ({ url, isMe }: { url: string, isMe: boolean }) => {
   }, [sound]);
 
   const loadSound = async () => {
-    const { sound: newSound } = await Audio.Sound.createAsync(
-      { uri: url },
-      { shouldPlay: true },
-      (status: any) => {
-        if (status.isLoaded) {
-          setPosition(status.positionMillis);
-          setDuration(status.durationMillis || 1);
-          setIsPlaying(status.isPlaying);
-          if (status.didJustFinish) {
-            setIsPlaying(false);
-            setPosition(0);
+    try {
+      let playableUri = url;
+      if (url.startsWith('data:audio')) {
+        const base64Data = url.split(',')[1];
+        playableUri = FileSystem.cacheDirectory + 'temp_play_' + Date.now() + '.m4a';
+        await FileSystem.writeAsStringAsync(playableUri, base64Data, { encoding: 'base64' });
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: playableUri },
+        { shouldPlay: true },
+        (status: any) => {
+          if (status.isLoaded) {
+            setPosition(status.positionMillis);
+            setDuration(status.durationMillis || 1);
+            setIsPlaying(status.isPlaying);
+            if (status.didJustFinish) {
+              setIsPlaying(false);
+              setPosition(0);
+            }
           }
         }
-      }
-    );
-    setSound(newSound);
-    setIsPlaying(true);
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+    } catch (e) {
+      console.log('Error loading sound:', e);
+    }
   };
 
   const playPause = async () => {

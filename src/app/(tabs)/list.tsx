@@ -1,49 +1,67 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, SafeAreaView, Animated, ScrollView, TextInput } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Animated, ScrollView, TextInput, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, database } from '../../../firebaseConfig';
 import { ref, onValue } from 'firebase/database';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 
-const AnimatedTicketCard = ({ item, index, isAdmin, onPress, getStatusConfig }: any) => {
+const AnimatedTicketCard = ({ item, index, onPress, getStatusConfig }: any) => {
   const translateY = useRef(new Animated.Value(15)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 400, delay: index * 80, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 400, delay: index * 80, useNativeDriver: true })
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: Math.min(index * 40, 400), useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 300, delay: Math.min(index * 40, 400), useNativeDriver: true })
     ]).start();
   }, []);
 
   const statusCfg = getStatusConfig(item.status);
 
+  // Map category to a simple icon
+  const getCatIcon = (cat: string) => {
+    if (!cat) return 'folder-outline';
+    if (cat.toLowerCase().includes('infrastruktur')) return 'business';
+    if (cat.toLowerCase().includes('kebersihan')) return 'trash-bin';
+    if (cat.toLowerCase().includes('pelayanan')) return 'people';
+    if (cat.toLowerCase().includes('keamanan')) return 'shield-checkmark';
+    return 'document-text';
+  };
+
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      <TouchableOpacity activeOpacity={0.6} onPress={onPress} style={styles.ticketCard}>
-        <View style={styles.ticketHeader}>
-          <Text style={styles.namaPelapor} numberOfLines={1}>{item.nama}</Text>
-          <Text style={styles.tanggal}>
-            {new Date(item.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-          </Text>
-        </View>
+      <TouchableOpacity activeOpacity={0.6} onPress={onPress} style={styles.compactCard}>
         
-        <View style={styles.ticketBody}>
-          {item.kategori && (
-            <View style={styles.catBadge}>
-              <Text style={styles.catText}>{item.kategori}</Text>
-            </View>
-          )}
-          <Text style={styles.judul}>{item.judul}</Text>
-          <Text style={styles.isi} numberOfLines={2}>{item.isi}</Text>
-        </View>
-        
-        <View style={styles.ticketFooter}>
-          <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-            <Text style={[styles.statusText, { color: statusCfg.color }]}>{item.status || 'Menunggu'}</Text>
+        {/* Left Icon (Category) */}
+        <View style={styles.iconColumn}>
+          <Text style={styles.listNumber}>{index + 1}</Text>
+          <View style={styles.catIconWrap}>
+            <Ionicons name={getCatIcon(item.kategori) as any} size={20} color="#64748B" />
           </View>
-          <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
         </View>
+
+        {/* Center Content (Title & Name) */}
+        <View style={styles.centerColumn}>
+          <Text style={styles.judul} numberOfLines={1}>{item.judul}</Text>
+          <View style={styles.nameRow}>
+            <Ionicons name="person-circle-outline" size={14} color="#94A3B8" style={{ marginRight: 4 }} />
+            <Text style={styles.namaPelapor} numberOfLines={1}>{item.nama}</Text>
+          </View>
+        </View>
+
+        {/* Right Content (Date & Status Dot) */}
+        <View style={styles.rightColumn}>
+          <Text style={styles.tanggal}>
+            {new Date(item.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
+          </Text>
+          <View style={[styles.compactStatusBadge, { backgroundColor: statusCfg.bg, borderColor: statusCfg.border }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusCfg.color }]} />
+            <Text style={[styles.statusText, { color: statusCfg.color }]}>{item.status}</Text>
+          </View>
+        </View>
+
       </TouchableOpacity>
     </Animated.View>
   );
@@ -52,7 +70,9 @@ const AnimatedTicketCard = ({ item, index, isAdmin, onPress, getStatusConfig }: 
 export default function ListScreen() {
   const [pengaduanList, setPengaduanList] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState('Semua');
+  const [filterKategori, setFilterKategori] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
+
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -64,7 +84,10 @@ export default function ListScreen() {
     if (params.filter) {
       setFilterStatus(params.filter as string);
     }
-  }, [params.filter]);
+    if (params.category) {
+      setFilterKategori(params.category as string);
+    }
+  }, [params.filter, params.category]);
 
   useEffect(() => {
     Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -78,7 +101,7 @@ export default function ListScreen() {
           ...data[key]
         }));
         const filteredData = isAdmin ? formattedData : formattedData.filter(item => item.nama === auth.currentUser?.email);
-        setPengaduanList(filteredData.reverse());
+        setPengaduanList(filteredData);
       } else {
         setPengaduanList([]);
       }
@@ -93,21 +116,38 @@ export default function ListScreen() {
   };
 
   const getStatusConfig = (status: string) => {
-    if (status === 'Selesai') return { bg: '#F0FDF4', color: '#16A34A' };
-    if (status === 'Diproses') return { bg: '#EFF6FF', color: '#2563EB' };
-    return { bg: '#FEFCE8', color: '#CA8A04' };
+    if (status === 'Selesai') return { bg: '#F0FDF4', color: '#16A34A', border: '#DCFCE7' };
+    if (status === 'Diproses') return { bg: '#EFF6FF', color: '#2563EB', border: '#DBEAFE' };
+    return { bg: '#FEFCE8', color: '#CA8A04', border: '#FEF08A' };
   };
+
+  const FILTERS = [
+    { label: 'Semua', icon: 'apps' },
+    { label: 'Menunggu', icon: 'time' },
+    { label: 'Diproses', icon: 'sync' },
+    { label: 'Selesai', icon: 'checkmark-circle' },
+  ];
+
+  const CATEGORIES = [
+    { label: 'Semua Kategori', id: 'Semua' },
+    { label: 'Infrastruktur', id: 'Infrastruktur' },
+    { label: 'Kebersihan', id: 'Kebersihan' },
+    { label: 'Pelayanan Publik', id: 'Pelayanan Publik' },
+    { label: 'Keamanan', id: 'Keamanan' },
+    { label: 'Lainnya', id: 'Lainnya' },
+  ];
 
   const pendingCount = pengaduanList.filter(p => p.status === 'Menunggu').length;
 
   const displayList = pengaduanList.filter(item => {
     const matchStatus = filterStatus === 'Semua' || item.status === filterStatus;
+    const matchCategory = filterKategori === 'Semua' || item.kategori === filterKategori;
     const searchLower = searchQuery.toLowerCase();
     const matchSearch = 
       (item.judul && item.judul.toLowerCase().includes(searchLower)) ||
       (item.isi && item.isi.toLowerCase().includes(searchLower)) ||
       (item.nama && item.nama.toLowerCase().includes(searchLower));
-    return matchStatus && matchSearch;
+    return matchStatus && matchCategory && matchSearch;
   });
 
   return (
@@ -115,20 +155,28 @@ export default function ListScreen() {
       <View style={styles.content}>
         
         <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-          <Text style={styles.title}>{isAdmin ? 'Direktori Admin' : 'Riwayat Laporan'}</Text>
-          <Text style={styles.subtitle}>{isAdmin ? 'Pusat pantauan data laporan publik.' : 'Pantau status laporan yang Anda kirim.'}</Text>
+          <Text style={styles.title}>{isAdmin ? 'Direktori Laporan' : 'Riwayat Laporan'}</Text>
+          <Text style={styles.subtitle}>{isAdmin ? 'Pusat pantauan data pengaduan publik.' : 'Pantau perkembangan status laporan Anda.'}</Text>
         </Animated.View>
 
         {!loading && isAdmin && (
-          <Animated.View style={[styles.statsContainer, { opacity: headerOpacity }]}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>TOTAL</Text>
-              <Text style={styles.statNumber}>{pengaduanList.length}</Text>
-            </View>
-            <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#E2E8F0', borderRadius: 0 }]}>
-              <Text style={styles.statLabel}>MENUNGGU</Text>
-              <Text style={[styles.statNumber, { color: '#CA8A04' }]}>{pendingCount}</Text>
-            </View>
+          <Animated.View style={{ opacity: headerOpacity }}>
+            <LinearGradient
+              colors={['#1E3A8A', '#3B82F6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.statsContainer}
+            >
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>TOTAL LAPORAN</Text>
+                <Text style={styles.statNumber}>{pengaduanList.length}</Text>
+              </View>
+              <View style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.2)' }]}>
+                <Text style={styles.statLabel}>PERLU DIPROSES</Text>
+                <Text style={[styles.statNumber, { color: '#FCD34D' }]}>{pendingCount}</Text>
+              </View>
+              <Ionicons name="pie-chart" size={80} color="rgba(255,255,255,0.1)" style={{ position: 'absolute', right: -10, bottom: -10 }} />
+            </LinearGradient>
           </Animated.View>
         )}
 
@@ -136,7 +184,7 @@ export default function ListScreen() {
           <Ionicons name="search" size={20} color="#94A3B8" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Cari laporan, nama, atau isi..."
+            placeholder="Cari laporan atau nama..."
             placeholderTextColor="#CBD5E1"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -148,48 +196,69 @@ export default function ListScreen() {
           )}
         </View>
 
-        <View style={styles.filterContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-            {['Semua', 'Menunggu', 'Diproses', 'Selesai'].map((status) => (
-              <TouchableOpacity
-                key={status}
-                style={[styles.filterBtn, filterStatus === status && styles.filterBtnActive]}
-                onPress={() => setFilterStatus(status)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterText, filterStatus === status && styles.filterTextActive]}>
-                  {status}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.filtersWrapper}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filterScroll} style={{ marginBottom: 10 }}>
+            {CATEGORIES.map((item) => {
+              const isActive = filterKategori === item.id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.filterBtn, isActive && styles.filterBtnActive]}
+                  onPress={() => setFilterKategori(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>{item.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.filterScroll}>
+            {FILTERS.map((item) => {
+              const isActive = filterStatus === item.label;
+              return (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[styles.filterBtn, isActive && styles.filterBtnActive]}
+                  onPress={() => setFilterStatus(item.label)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={14} color={isActive ? '#FFFFFF' : '#64748B'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
         <View style={styles.listWrapper}>
           {loading ? (
-            <ActivityIndicator size="small" color="#2563EB" style={{ marginTop: 40 }} />
+            <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 60 }} />
           ) : (
               <FlatList
                 data={displayList}
                 keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.flatListContent}
-              renderItem={({ item, index }) => (
-                <AnimatedTicketCard 
-                  item={item} 
-                  index={index} 
-                  isAdmin={isAdmin} 
-                  onPress={() => handleUpdateStatus(item)} 
-                  getStatusConfig={getStatusConfig} 
-                />
-              )}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyTitle}>Kosong</Text>
-                  <Text style={styles.emptyText}>Belum ada data laporan saat ini.</Text>
-                </View>
-              }
-            />
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.flatListContent}
+                renderItem={({ item, index }) => (
+                  <AnimatedTicketCard 
+                    item={item} 
+                    index={index} 
+                    onPress={() => handleUpdateStatus(item)} 
+                    getStatusConfig={getStatusConfig} 
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="folder-open-outline" size={64} color="#E2E8F0" style={{ marginBottom: 16 }} />
+                    <Text style={styles.emptyTitle}>Tidak Ada Data</Text>
+                    <Text style={styles.emptyText}>Belum ada laporan yang sesuai dengan kriteria pencarian ini.</Text>
+                  </View>
+                }
+              />
           )}
         </View>
 
@@ -199,28 +268,27 @@ export default function ListScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 32 },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' }, // Back to white to support compact lists
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 40 : 20 },
   
-  header: { marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700', color: '#0F172A', letterSpacing: -0.5, marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#64748B', fontWeight: '400', lineHeight: 22 },
+  header: { marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5, marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#64748B', fontWeight: '400' },
   
   statsContainer: { 
     flexDirection: 'row', 
-    marginBottom: 24, 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', 
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC'
+    marginBottom: 20, 
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4
   },
-  statBox: { 
-    flex: 1, 
-    padding: 16, 
-    justifyContent: 'center',
-  },
-  statLabel: { fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 4 },
-  statNumber: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
+  statBox: { flex: 1, padding: 16, justifyContent: 'center', zIndex: 2 },
+  statLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.8)', marginBottom: 4, letterSpacing: 1 },
+  statNumber: { fontSize: 24, fontWeight: '800', color: '#FFFFFF' },
 
   listWrapper: { flex: 1 },
   flatListContent: { paddingBottom: 110 },
@@ -230,68 +298,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     height: 48,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9'
   },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#0F172A', height: '100%' },
+  searchFocused: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.1,
+  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 14, color: '#0F172A', height: '100%' },
   clearSearchBtn: { padding: 4 },
 
-  filterContainer: { marginBottom: 16, marginHorizontal: -24 },
-  filterScroll: { paddingHorizontal: 24, gap: 8 },
+  filtersWrapper: { marginBottom: 16, marginHorizontal: -20 },
+  filterScroll: { paddingHorizontal: 20, gap: 8 },
   filterBtn: {
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#F1F5F9',
   },
-  filterBtnActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  filterText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  filterBtnActive: { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  filterText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
   filterTextActive: { color: '#FFFFFF' },
   
-  ticketCard: { 
+  /* Compact List Styles */
+  compactCard: { 
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, 
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  ticketHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
-    backgroundColor: '#F8FAFC',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12
   },
-  namaPelapor: { fontSize: 13, color: '#475569', fontWeight: '600', flex: 1, marginRight: 16 },
-  tanggal: { fontSize: 12, color: '#94A3B8' },
+  iconColumn: { marginRight: 14, flexDirection: 'row', alignItems: 'center' },
+  listNumber: { fontSize: 13, fontWeight: '700', color: '#94A3B8', width: 20, textAlign: 'center', marginRight: 8 },
+  catIconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   
-  ticketBody: { padding: 16 },
-  catBadge: { alignSelf: 'flex-start', backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
-  catText: { fontSize: 10, fontWeight: '600', color: '#64748B', textTransform: 'uppercase' },
-  judul: { fontSize: 16, fontWeight: '600', color: '#0F172A', marginBottom: 4 },
-  isi: { fontSize: 14, color: '#64748B', lineHeight: 22 },
+  centerColumn: { flex: 1, justifyContent: 'center' },
+  judul: { fontSize: 15, fontWeight: '700', color: '#0F172A', marginBottom: 4, paddingRight: 10 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  namaPelapor: { fontSize: 12, color: '#64748B', fontWeight: '500' },
   
-  ticketFooter: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16,
-    paddingTop: 0
-  },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  statusText: { fontSize: 12, fontWeight: '600' },
+  rightColumn: { alignItems: 'flex-end', justifyContent: 'center' },
+  tanggal: { fontSize: 11, color: '#94A3B8', fontWeight: '600', marginBottom: 6 },
   
-  emptyContainer: { alignItems: 'center', marginTop: 40, padding: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#0F172A', marginBottom: 8 },
-  emptyText: { textAlign: 'center', color: '#64748B', fontSize: 15 }
+  compactStatusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, borderWidth: 1 },
+  statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 4 },
+  statusText: { fontSize: 10, fontWeight: '700' },
+
+  emptyContainer: { alignItems: 'center', marginTop: 60, padding: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 10 },
+  emptyText: { textAlign: 'center', color: '#64748B', fontSize: 14, lineHeight: 22 }
 });

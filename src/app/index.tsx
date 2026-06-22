@@ -33,7 +33,7 @@ export default function SplashScreen() {
           if (user.email === 'admin@gmail.com') {
             router.replace('/(tabs)/list');
           } else {
-            router.replace('/(tabs)/main');
+            router.replace('/(tabs)/home');
           }
         } else {
           router.replace('/login');

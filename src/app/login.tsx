@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { auth } from '../../firebaseConfig';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, signInWithPopup } from 'firebase/auth';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -11,6 +16,50 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: '647784359192-7jkfd8gq8f9cr6dbd7b8du03ds15q89l.apps.googleusercontent.com',
+  });
+
+  React.useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      setLoading(true);
+      signInWithCredential(auth, credential)
+        .then((userCredential) => {
+          if (userCredential.user.email === 'admin@gmail.com') {
+            router.replace('/(tabs)/list');
+          } else {
+            router.replace('/(tabs)/home');
+          }
+        })
+        .catch((error: any) => {
+          Alert.alert('Gagal login Google', error.message);
+          setLoading(false);
+        });
+    }
+  }, [response]);
+
+  const handleGoogleLogin = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        setLoading(true);
+        const provider = new GoogleAuthProvider();
+        const userCredential = await signInWithPopup(auth, provider);
+        if (userCredential.user.email === 'admin@gmail.com') {
+          router.replace('/(tabs)/list');
+        } else {
+          router.replace('/(tabs)/home');
+        }
+      } catch (error: any) {
+        Alert.alert('Gagal login Google', error.message);
+        setLoading(false);
+      }
+    } else {
+      promptAsync();
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -23,7 +72,7 @@ export default function LoginScreen() {
       if (userCredential.user.email === 'admin@gmail.com') {
         router.replace('/(tabs)/list');
       } else {
-        router.replace('/(tabs)/main');
+        router.replace('/(tabs)/home');
       }
     } catch (error: any) {
       Alert.alert('Gagal login', error.message);
@@ -81,6 +130,22 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Masuk</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.separatorContainer}>
+              <View style={styles.separatorLine} />
+              <Text style={styles.separatorText}>ATAU</Text>
+              <View style={styles.separatorLine} />
+            </View>
+
+            <TouchableOpacity 
+              style={styles.googleButton} 
+              onPress={handleGoogleLogin}
+              disabled={(!request && Platform.OS !== 'web') || loading}
+              activeOpacity={0.8}
+            >
+              <Image source={require('../../assets/google_logo.png')} style={styles.googleIcon} />
+              <Text style={styles.googleButtonText}>Lanjutkan dengan Google</Text>
+            </TouchableOpacity>
             
             <View style={styles.footerContainer}>
               <Text style={styles.footerText}>Belum punya akun? </Text>
@@ -131,11 +196,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center', 
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 20,
   },
   buttonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
   
   footerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   footerText: { fontSize: 14, color: '#64748B' },
-  footerLink: { fontSize: 14, color: '#2563EB', fontWeight: '600' }
+  footerLink: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
+
+  separatorContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  separatorLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  separatorText: { marginHorizontal: 12, fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    height: 56,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  googleIcon: { width: 24, height: 24, marginRight: 12 },
+  googleButtonText: { fontSize: 15, fontWeight: '600', color: '#0F172A' }
 });
