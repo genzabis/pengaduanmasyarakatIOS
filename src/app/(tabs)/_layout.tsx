@@ -2,7 +2,7 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { StyleSheet, Platform, View, Text } from 'react-native';
+import { StyleSheet, Platform, View } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -10,14 +10,16 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false, // Disable default label to use our ultra-precise custom label
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarShowLabel: true,
+        tabBarLabelStyle: styles.labelStyle,
+        tabBarActiveTintColor: '#2563EB',
+        tabBarInactiveTintColor: '#94A3B8',
         tabBarBackground: () => (
           <View style={styles.blurContainer}>
             {Platform.OS === 'ios' ? (
-              <BlurView tint="light" intensity={100} style={StyleSheet.absoluteFill} />
+              <BlurView tint="light" intensity={80} style={StyleSheet.absoluteFill} />
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.95)' }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF' }]} />
             )}
           </View>
         ),
@@ -27,13 +29,8 @@ export default function TabLayout() {
         name="main"
         options={{
           title: 'Lapor',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.tabItemContainer}>
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
-                <Ionicons name={focused ? "document-text" : "document-text-outline"} size={22} color={focused ? '#0A2540' : '#6B7280'} />
-              </View>
-              <Text style={[styles.customLabel, { color: focused ? '#0A2540' : '#6B7280' }]}>Lapor</Text>
-            </View>
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={color === '#2563EB' ? "megaphone" : "megaphone-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -41,13 +38,17 @@ export default function TabLayout() {
         name="list"
         options={{
           title: 'Direktori',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.tabItemContainer}>
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
-                <Ionicons name={focused ? "albums" : "albums-outline"} size={22} color={focused ? '#0A2540' : '#6B7280'} />
-              </View>
-              <Text style={[styles.customLabel, { color: focused ? '#0A2540' : '#6B7280' }]}>Direktori</Text>
-            </View>
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={color === '#2563EB' ? "folder-open" : "folder-open-outline"} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Pesan',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={color === '#2563EB' ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -55,13 +56,8 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: 'Notifikasi',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.tabItemContainer}>
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
-                <Ionicons name={focused ? "notifications" : "notifications-outline"} size={22} color={focused ? '#0A2540' : '#6B7280'} />
-              </View>
-              <Text style={[styles.customLabel, { color: focused ? '#0A2540' : '#6B7280' }]}>Notifikasi</Text>
-            </View>
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={color === '#2563EB' ? "notifications" : "notifications-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -69,13 +65,8 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ focused }) => (
-            <View style={styles.tabItemContainer}>
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
-                <Ionicons name={focused ? "person" : "person-outline"} size={22} color={focused ? '#0A2540' : '#6B7280'} />
-              </View>
-              <Text style={[styles.customLabel, { color: focused ? '#0A2540' : '#6B7280' }]}>Profil</Text>
-            </View>
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={color === '#2563EB' ? "person-circle" : "person-circle-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -86,53 +77,25 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 32 : 24,
+    bottom: 0,
     left: 0,
     right: 0,
-    marginHorizontal: 24,
-    elevation: 8,
+    elevation: 0,
     backgroundColor: 'transparent',
-    height: 64,
+    height: Platform.OS === 'ios' ? 88 : 64,
     borderTopWidth: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+    paddingTop: 8,
   },
   blurContainer: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 32,
-    overflow: 'hidden',
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.8)' : '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.85)' : '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
   },
-  tabBarItem: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 12 : 0, 
-  },
-  tabItemContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 64, // Fixed width suitable for 4 tabs
-  },
-  iconWrapper: {
-    width: 56,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  iconWrapperActive: {
-    backgroundColor: 'rgba(10, 37, 64, 0.08)',
-  },
-  customLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    marginTop: 3,
+  labelStyle: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 4,
   }
 });

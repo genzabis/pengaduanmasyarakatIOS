@@ -1,39 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView, Animated, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView, Animated, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { auth, database } from '../../../firebaseConfig';
 import { ref, push, set } from 'firebase/database';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function MainScreen() {
   const [nama, setNama] = useState('');
   const [judul, setJudul] = useState('');
+  const [kategori, setKategori] = useState('');
   const [isi, setIsi] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
   const router = useRouter();
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  
-  // Staggered Input Animations
+  // Subtle Fade Up Animations
+  const headerAnim = useRef(new Animated.Value(0)).current;
   const input1Anim = useRef(new Animated.Value(0)).current;
+  const catAnim = useRef(new Animated.Value(0)).current;
   const input2Anim = useRef(new Animated.Value(0)).current;
   const input3Anim = useRef(new Animated.Value(0)).current;
   const btnAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true })
-    ]).start();
-
-    // DKV-Level Staggered Entrance
-    Animated.stagger(150, [
-      Animated.spring(input1Anim, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }),
-      Animated.spring(input2Anim, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }),
-      Animated.spring(input3Anim, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }),
-      Animated.spring(btnAnim, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true })
+    Animated.stagger(100, [
+      Animated.timing(headerAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(input1Anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(catAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(input2Anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(input3Anim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(btnAnim, { toValue: 1, duration: 400, useNativeDriver: true })
     ]).start();
 
     if (auth.currentUser?.email) {
@@ -42,8 +38,8 @@ export default function MainScreen() {
   }, []);
 
   const simpanPengaduan = async () => {
-    if (!nama || !judul || !isi) {
-      Alert.alert('Error', 'Harap lengkapi semua data laporan!');
+    if (!nama || !judul || !isi || !kategori) {
+      Alert.alert('Error', 'Harap lengkapi semua data laporan termasuk kategori!');
       return;
     }
     setLoading(true);
@@ -51,25 +47,25 @@ export default function MainScreen() {
       const newPengaduanRef = push(ref(database, 'pengaduan'));
       await set(newPengaduanRef, {
         nama,
+        kategori,
         judul,
         isi,
         tanggal: Date.now(),
         status: 'Menunggu'
       });
 
-      // --- Notifikasi ke Admin ---
       const adminNotifRef = push(ref(database, 'notifications'));
       await set(adminNotifRef, {
-        userId: 'admin@gmail.com', // Tujuan admin
+        userId: 'admin@gmail.com',
         title: 'Laporan Baru Masuk 🔔',
         message: `Laporan "${judul}" baru saja dikirimkan oleh ${nama}.`,
         time: Date.now(),
         type: 'info',
         read: false
       });
-      // --------------------------
 
       setJudul('');
+      setKategori('');
       setIsi('');
       router.push('/result');
     } catch (error: any) {
@@ -78,162 +74,182 @@ export default function MainScreen() {
     setLoading(false);
   };
 
+  const translateY = (anim: Animated.Value) => anim.interpolate({ inputRange: [0, 1], outputRange: [15, 0] });
+
   return (
-    <LinearGradient colors={['#E3F2FD', '#90CAF9']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.contentWrapper}>
-          
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            
-            <View style={styles.header}>
-              <View style={styles.headerTextWrap}>
-                <Text style={styles.title}>Pengaduan Masyarakat</Text>
-                <Text style={styles.subtitle}>Formulir Pelaporan Publik Terpadu</Text>
-              </View>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        
+        <Animated.View style={[styles.header, { opacity: headerAnim, transform: [{ translateY: translateY(headerAnim) }] }]}>
+          <Text style={styles.title}>Laporan Baru</Text>
+          <Text style={styles.subtitle}>Sampaikan aspirasi atau aduan Anda dengan detail.</Text>
+        </Animated.View>
+
+        <View style={styles.formSection}>
+          <Animated.View style={[styles.inputGroup, { opacity: input1Anim, transform: [{ translateY: translateY(input1Anim) }] }]}>
+            <Text style={styles.label}>NAMA PELAPOR</Text>
+            <View style={styles.inputContainer}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Identitas Anda" 
+                value={nama} 
+                onChangeText={setNama} 
+                placeholderTextColor="#CBD5E1"
+              />
             </View>
+          </Animated.View>
 
-            <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-              
-              <View style={styles.cardHeader}>
-                <Ionicons name="shield-checkmark" size={24} color="#059669" />
-                <Text style={styles.cardHeaderTitle}>Identitas & Laporan Baru</Text>
-              </View>
+          <Animated.View style={[styles.inputGroup, { opacity: catAnim, transform: [{ translateY: translateY(catAnim) }] }]}>
+            <Text style={styles.label}>KATEGORI PENGADUAN</Text>
+            <TouchableOpacity 
+              style={[styles.inputContainer, styles.dropdownTrigger]} 
+              onPress={() => setDropdownVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 15, color: kategori ? '#0F172A' : '#CBD5E1' }}>
+                {kategori || "Pilih kategori laporan..."}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+          </Animated.View>
 
-              <View style={styles.cardBody}>
-                <Animated.View style={[styles.inputGroup, { opacity: input1Anim, transform: [{ scale: input1Anim }] }]}>
-                  <Text style={styles.label}>NAMA PELAPOR</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="person" size={18} color="#9CA3AF" style={styles.inputIcon} />
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Identitas Anda (Otomatis dari Email)" 
-                      value={nama} 
-                      onChangeText={setNama} 
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
-                </Animated.View>
+          <Animated.View style={[styles.inputGroup, { opacity: input2Anim, transform: [{ translateY: translateY(input2Anim) }] }]}>
+            <Text style={styles.label}>JUDUL LAPORAN</Text>
+            <View style={styles.inputContainer}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Topik singkat pengaduan" 
+                value={judul} 
+                onChangeText={setJudul} 
+                placeholderTextColor="#CBD5E1"
+              />
+            </View>
+          </Animated.View>
 
-                <Animated.View style={[styles.inputGroup, { opacity: input2Anim, transform: [{ scale: input2Anim }] }]}>
-                  <Text style={styles.label}>JUDUL LAPORAN</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="document-text" size={18} color="#9CA3AF" style={styles.inputIcon} />
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Topik singkat pengaduan" 
-                      value={judul} 
-                      onChangeText={setJudul} 
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
-                </Animated.View>
-
-                <Animated.View style={[styles.inputGroup, { opacity: input3Anim, transform: [{ scale: input3Anim }] }]}>
-                  <Text style={styles.label}>RINCIAN KEJADIAN</Text>
-                  <View style={[styles.inputContainer, styles.textAreaContainer]}>
-                    <TextInput 
-                      style={[styles.input, styles.textArea]} 
-                      placeholder="Uraikan detail kejadian, lokasi, atau laporan selengkap mungkin..." 
-                      value={isi} 
-                      onChangeText={setIsi} 
-                      multiline 
-                      numberOfLines={6} 
-                      placeholderTextColor="#9CA3AF"
-                      textAlignVertical="top"
-                    />
-                  </View>
-                </Animated.View>
-                
-                <Animated.View style={{ opacity: btnAnim, transform: [{ scale: btnAnim }] }}>
-                  <TouchableOpacity style={styles.button} onPress={simpanPengaduan} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#fff" /> : (
-                      <>
-                        <Ionicons name="paper-plane" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                        <Text style={styles.buttonText}>KIRIM LAPORAN SEKARANG</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
-              </View>
-
-            </Animated.View>
-
-          </ScrollView>
-
+          <Animated.View style={[styles.inputGroup, { opacity: input3Anim, transform: [{ translateY: translateY(input3Anim) }] }]}>
+            <Text style={styles.label}>RINCIAN KEJADIAN</Text>
+            <View style={[styles.inputContainer, styles.textAreaContainer]}>
+              <TextInput 
+                style={[styles.input, styles.textArea]} 
+                placeholder="Uraikan detail kejadian, lokasi, atau laporan selengkap mungkin..." 
+                value={isi} 
+                onChangeText={setIsi} 
+                multiline 
+                numberOfLines={6} 
+                placeholderTextColor="#CBD5E1"
+                textAlignVertical="top"
+              />
+            </View>
+          </Animated.View>
+          
+          <Animated.View style={{ opacity: btnAnim, transform: [{ translateY: translateY(btnAnim) }] }}>
+            <TouchableOpacity style={styles.button} onPress={simpanPengaduan} disabled={loading} activeOpacity={0.8}>
+              {loading ? <ActivityIndicator color="#fff" /> : (
+                <Text style={styles.buttonText}>Kirim Laporan</Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
         </View>
-      </SafeAreaView>
-    </LinearGradient>
+
+      </ScrollView>
+
+      {/* Dropdown Modal */}
+      <Modal visible={dropdownVisible} transparent animationType="fade" onRequestClose={() => setDropdownVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setDropdownVisible(false)} activeOpacity={1} />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pilih Kategori</Text>
+              <TouchableOpacity onPress={() => setDropdownVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            
+            {['Infrastruktur & Fasilitas', 'Kebersihan', 'Pelayanan Publik', 'Keamanan', 'Lainnya'].map((cat) => (
+              <TouchableOpacity 
+                key={cat} 
+                style={styles.dropdownOption}
+                onPress={() => {
+                  setKategori(cat);
+                  setDropdownVisible(false);
+                }}
+              >
+                <Text style={[styles.dropdownOptionText, kategori === cat && { color: '#2563EB', fontWeight: '600' }]}>{cat}</Text>
+                {kategori === cat && <Ionicons name="checkmark" size={20} color="#2563EB" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1 },
-  contentWrapper: { flex: 1 },
-  // Increased paddingBottom to account for the TabBar height (which is ~88 on iOS)
-  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 110, flexGrow: 1 },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 110, flexGrow: 1 },
   
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  headerTextWrap: { flex: 1 },
-  title: { fontSize: 34, fontWeight: '900', color: '#0A2540', letterSpacing: -0.5, lineHeight: 40 },
-  subtitle: { fontSize: 13, color: '#1E3A8A', marginTop: 6, fontWeight: '600', letterSpacing: 0.5 },
+  header: { marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: '700', color: '#0F172A', letterSpacing: -0.5, marginBottom: 8 },
+  subtitle: { fontSize: 15, color: '#64748B', fontWeight: '400', lineHeight: 22 },
   
-  card: { 
-    backgroundColor: '#FFFFFF', 
-    borderRadius: 24, 
-    shadowColor: '#000000', 
-    shadowOffset: { width: 0, height: 12 }, 
-    shadowOpacity: 0.04, 
-    shadowRadius: 24,
-    elevation: 4,
+  formSection: { flex: 1 },
+  
+  inputGroup: { marginBottom: 24 },
+  label: { fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 8, letterSpacing: 0.5 },
+  inputContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#F9FAFB',
-    overflow: 'hidden'
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 16,
   },
-  cardHeader: {
+  textAreaContainer: { paddingVertical: 16 },
+  input: { paddingVertical: 16, color: '#0F172A', fontSize: 15 },
+  textArea: { height: 120, paddingTop: 0 },
+  dropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16 },
+  
+  button: { backgroundColor: '#2563EB', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
+  buttonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16, letterSpacing: 0.5 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+  },
+  modalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  closeBtn: {
+    padding: 4,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
+    borderBottomColor: '#F1F5F9'
   },
-  cardHeaderTitle: {
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0A2540'
-  },
-  cardBody: {
-    padding: 20,
-  },
-  
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 11, fontWeight: '800', color: '#6B7280', marginBottom: 8, letterSpacing: 1 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB'
-  },
-  inputIcon: { marginRight: 12 },
-  textAreaContainer: { alignItems: 'flex-start', paddingVertical: 16 },
-  input: { flex: 1, paddingVertical: 16, color: '#111827', fontSize: 15, fontWeight: '500' },
-  textArea: { height: 120, paddingTop: 0 },
-  
-  button: { 
-    flexDirection: 'row',
-    backgroundColor: '#0A2540', 
-    height: 56, 
-    borderRadius: 14, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginTop: 8,
-    shadowColor: '#0A2540', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8
-  },
-  buttonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14, letterSpacing: 1 }
+  dropdownOptionText: { fontSize: 15, color: '#475569' },
 });
