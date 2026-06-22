@@ -1,47 +1,53 @@
-# Pengaduan Masyarakat IOS
+# Pengaduan Masyarakat iOS
 
-Pengaduan Masyarakat is an integrated public reporting mobile application built with React Native and Expo. It provides a seamless platform for citizens to submit reports and track their resolution progress, while providing administrators with a centralized dashboard for managing and updating report statuses in real-time.
+Pengaduan Masyarakat adalah aplikasi seluler yang terintegrasi untuk memfasilitasi pelaporan warga kepada instansi terkait. Dibangun menggunakan React Native dan Expo, aplikasi ini menyediakan platform yang lancar bagi warga untuk mengirimkan laporan dan melacak perkembangannya. Di sisi lain, aplikasi ini juga menyediakan panel kendali terpusat bagi administrator untuk mengelola dan memperbarui status laporan secara waktu nyata (real-time).
 
-## Features
+## Fitur Utama
 
-- User Authentication: Secure login and registration using Firebase Authentication.
-- Role-Based Access Control: Specialized routing and views for general users and system administrators.
-- Real-Time Database: Instant synchronization of submitted reports and status updates via Firebase Realtime Database.
-- Interactive UI/UX: Implementation of high-performance native animations, glassmorphism design principles, and responsive layouts.
-- Status Tracking: Detailed timeline views for users to track the exact state of their submissions (Pending, In Progress, Completed).
+- **Otentikasi Pengguna**: Sistem pendaftaran dan masuk (login) yang aman menggunakan Firebase Authentication.
+- **Akses Berbasis Peran**: Antarmuka dan fitur yang disesuaikan secara dinamis untuk Pengguna Biasa (Warga) dan Administrator.
+- **Dua Mode Pelaporan**: 
+  - **Pelaporan Teks**: Memungkinkan pengguna menuliskan judul dan rincian kejadian.
+  - **Pelaporan Suara (Voice Note)**: Memungkinkan pengguna merekam pesan suara hingga durasi maksimal 10 detik sebagai alternatif pengganti teks. Dilengkapi dengan fitur pratinjau (playback) sebelum laporan dikirimkan.
+- **Validasi Data Laporan**: Setiap laporan diwajibkan untuk melampirkan Foto Bukti Kejadian serta Koordinat Lokasi (GPS) agar laporan bersifat valid dan mudah ditindaklanjuti.
+- **Pelacakan Status Interaktif**: Pengguna dapat memantau status laporan mereka melalui tampilan linimasa (Menunggu, Diproses, Selesai, Ditolak) beserta tanggapan dari administrator.
+- **Manajemen Administrator**: Administrator memiliki hak akses penuh untuk meninjau laporan, memberikan tanggapan, mengubah status pelaporan, menyiarkan pesan pengumuman (broadcast) kepada seluruh pengguna, serta mengelola portal berita.
+- **Sinkronisasi Waktu Nyata (Real-time)**: Menggunakan Firebase Realtime Database untuk memastikan setiap data laporan, notifikasi, dan pembaruan status diterima seketika oleh pengguna.
+- **Portal Informasi dan Berita**: Menampilkan berita atau informasi terkini pada halaman utama pengguna yang dapat diperbarui oleh administrator.
 
-## Tech Stack
+## Teknologi yang Digunakan
 
-- Framework: React Native / Expo
-- Routing: Expo Router (File-based routing)
-- Backend & Database: Firebase (Authentication & Realtime Database)
-- Animation: React Native Animated API (Native Driver Enabled)
-- Styling: Custom StyleSheet & Expo Linear Gradient
+- **Kerangka Kerja (Framework)**: React Native / Expo
+- **Navigasi (Routing)**: Expo Router (File-based routing)
+- **Basis Data dan Layanan**: Firebase (Authentication & Realtime Database)
+- **Komponen Perangkat Keras**: Expo AV (Audio), Expo Location (GPS), Expo Image Picker (Kamera/Galeri)
+- **Antarmuka Pengguna (UI)**: Custom StyleSheet dan Expo Linear Gradient
 
-## Installation and Setup
+## Panduan Pemasangan
 
-1. Clone or download the repository.
-2. Ensure Node.js is installed on your system.
-3. Install project dependencies:
+1. Unduh atau kloning repositori ini ke dalam komputer Anda.
+2. Pastikan Anda telah memasang Node.js pada sistem Anda.
+3. Pasang seluruh dependensi proyek dengan menjalankan perintah berikut:
    ```bash
    npm install
    ```
-4. Start the Expo development server:
+4. Jalankan server pengembangan Expo:
    ```bash
    npx expo start --clear
    ```
-5. Scan the generated QR code using the Expo Go application on your mobile device (available on iOS and Android).
+5. Pindai kode QR yang muncul menggunakan aplikasi Expo Go pada perangkat seluler Anda (tersedia di iOS dan Android).
 
-## Project Structure
+## Struktur Proyek
 
-- `src/app/` - Contains the primary Expo Router file structure.
-  - `(tabs)/` - Tab-based navigation screens (Dashboard, Directory, etc.).
-  - `report/` - Dynamic routes for detailed report tracking.
-- `firebaseConfig.js` - Centralized Firebase initialization and configuration.
-- `assets/` - Static assets including application logos and icons.
+- `src/app/` - Berisi struktur utama dari Expo Router.
+  - `(tabs)/` - Halaman navigasi utama berupa tab (Beranda, Lapor, Profil).
+  - `report/` - Rute dinamis untuk menampilkan rincian pelaporan spesifik.
+  - `admin/` - Rute khusus untuk fitur panel administrator.
+- `firebaseConfig.js` - Berkas konfigurasi untuk inisialisasi Firebase.
+- `assets/` - Berisi seluruh aset statis seperti ikon dan logo aplikasi.
 
-## Requirements
+## Persyaratan Sistem
 
-- Node.js >= 18.x
+- Node.js versi 18.x atau lebih baru
 - Expo CLI
-- Expo Go App (for physical device testing)
+- Aplikasi Expo Go (untuk pengujian pada perangkat fisik)
