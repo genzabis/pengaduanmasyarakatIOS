@@ -27,7 +27,6 @@ export default function ProfileScreen() {
 
   // Settings states
   const [pushNotif, setPushNotif] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
   const [biometric, setBiometric] = useState(false);
 
   const currentUser = auth.currentUser;
@@ -36,7 +35,6 @@ export default function ProfileScreen() {
   const displayName = currentUser?.displayName || '';
 
   useEffect(() => {
-    // Fetch stats
     const pengaduanRef = ref(database, 'pengaduan');
     const unsubscribeStats = onValue(pengaduanRef, (snapshot) => {
       const data = snapshot.val();
@@ -55,7 +53,6 @@ export default function ProfileScreen() {
       setLoading(false);
     });
 
-    // Fetch user phone & NIK from database
     if (currentUser?.uid) {
       const userRef = ref(database, `users/${currentUser.uid}`);
       onValue(userRef, (snapshot) => {
@@ -92,7 +89,7 @@ export default function ProfileScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.1, // Extra low quality for base64 optimization
+        quality: 0.1,
         base64: true,
       });
 
@@ -121,12 +118,10 @@ export default function ProfileScreen() {
     if (!currentUser) return;
     setSaving(true);
     try {
-      // Update Auth Profile
       if (editName !== currentUser.displayName) {
         await updateProfile(currentUser, { displayName: editName });
       }
       
-      // Update Realtime DB for Phone and NIK
       if (editPhone !== userPhone || editNik !== userNik) {
         await update(ref(database, `users/${currentUser.uid}`), {
           phone: editPhone,
@@ -150,10 +145,10 @@ export default function ProfileScreen() {
   };
 
   const getRankColor = (total: number) => {
-    if (isAdmin) return { bg: '#EFF6FF', text: '#2563EB', border: '#DBEAFE' };
-    if (total >= 5) return { bg: '#FEF2F2', text: '#DC2626', border: '#FECACA' }; 
-    if (total >= 1) return { bg: '#F0FDF4', text: '#16A34A', border: '#DCFCE7' }; 
-    return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' }; 
+    if (isAdmin) return { bg: '#EFF6FF', text: '#2563EB', icon: 'shield-checkmark' };
+    if (total >= 5) return { bg: '#FEF2F2', text: '#DC2626', icon: 'star' }; 
+    if (total >= 1) return { bg: '#F0FDF4', text: '#16A34A', icon: 'leaf' }; 
+    return { bg: '#F8FAFC', text: '#64748B', icon: 'person' }; 
   };
 
   const rankColor = getRankColor(stats.total);
@@ -175,57 +170,115 @@ export default function ProfileScreen() {
             ) : currentUser?.photoURL ? (
               <Image source={{ uri: currentUser.photoURL }} style={styles.avatarImage} />
             ) : (
-              <Ionicons name={isAdmin ? "shield-checkmark" : "person"} size={32} color="#2563EB" />
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarPlaceholderText}>
+                  {displayName ? displayName.substring(0, 2).toUpperCase() : 'US'}
+                </Text>
+              </View>
             )}
             <View style={styles.cameraIconBadge}>
-              <Ionicons name="camera" size={14} color="#FFFFFF" />
+              <Ionicons name="camera" size={12} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
+
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{displayName || 'Pengguna Baru'}</Text>
             <View style={styles.roleBadgeContainer}>
-              <View style={[styles.roleBadge, { backgroundColor: rankColor.bg, borderColor: rankColor.border }]}>
+              <View style={[styles.roleBadge, { backgroundColor: rankColor.bg }]}>
+                <Ionicons name={rankColor.icon as any} size={12} color={rankColor.text} style={{ marginRight: 4 }} />
                 <Text style={[styles.roleText, { color: rankColor.text }]}>{getRank(stats.total)}</Text>
               </View>
             </View>
           </View>
           
           <TouchableOpacity style={styles.editIconBtn} onPress={openEditModal} activeOpacity={0.7}>
-            <Ionicons name="pencil" size={20} color="#64748B" />
+            <Ionicons name="pencil" size={18} color="#64748B" />
           </TouchableOpacity>
         </View>
 
+        {/* Stats Strip (Matched with Home) */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Aktivitas Anda</Text>
+        </View>
+        <View style={styles.statsStrip}>
+          <TouchableOpacity style={styles.statsStripItem} activeOpacity={0.6} onPress={() => router.push('/list?filter=Semua')}>
+            <Text style={styles.statsStripNum}>{stats.total}</Text>
+            <Text style={styles.statsStripLabel}>Total</Text>
+          </TouchableOpacity>
+          <View style={styles.statsStripDivider} />
+          <TouchableOpacity style={styles.statsStripItem} activeOpacity={0.6} onPress={() => router.push('/list?filter=Menunggu')}>
+            <Text style={styles.statsStripNum}>{stats.pending}</Text>
+            <Text style={styles.statsStripLabel}>Menunggu</Text>
+          </TouchableOpacity>
+          <View style={styles.statsStripDivider} />
+          <TouchableOpacity style={styles.statsStripItem} activeOpacity={0.6} onPress={() => router.push('/list?filter=Selesai')}>
+            <Text style={styles.statsStripNum}>{stats.finished}</Text>
+            <Text style={styles.statsStripLabel}>Selesai</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Panel Admin</Text>
+            </View>
+            <View style={styles.card}>
+              <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={() => router.push('/admin/users')}>
+                <View style={[styles.settingIconBox, { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE', borderWidth: 1 }]}>
+                  <Ionicons name="people" size={18} color="#2563EB" />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Kelola Pengguna</Text>
+                  <Text style={styles.settingDesc}>Manajemen data warga terdaftar</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              </TouchableOpacity>
+              
+              <View style={styles.divider} />
+
+              <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={() => router.push('/admin/broadcast')}>
+                <View style={[styles.settingIconBox, { backgroundColor: '#FEF2F2', borderColor: '#FEE2E2', borderWidth: 1 }]}>
+                  <Ionicons name="megaphone" size={18} color="#EF4444" />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Pesan Siaran</Text>
+                  <Text style={styles.settingDesc}>Kirim pengumuman massal ke warga</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         {/* Personal Info */}
-        <View style={styles.infoCard}>
+        <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Informasi Pribadi</Text>
-          
+        </View>
+        <View style={styles.card}>
           <View style={styles.infoRow}>
             <View style={styles.infoIconBox}>
-              <Ionicons name="mail" size={18} color="#64748B" />
+              <Ionicons name="mail-outline" size={18} color="#64748B" />
             </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Email Terdaftar</Text>
               <Text style={styles.infoValue}>{userEmail}</Text>
             </View>
           </View>
-
           <View style={styles.divider} />
-
           <View style={styles.infoRow}>
             <View style={styles.infoIconBox}>
-              <Ionicons name="card" size={18} color="#64748B" />
+              <Ionicons name="card-outline" size={18} color="#64748B" />
             </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Nomor Induk Kependudukan</Text>
               <Text style={styles.infoValue}>{userNik || 'Belum diatur'}</Text>
             </View>
           </View>
-
           <View style={styles.divider} />
-
           <View style={styles.infoRow}>
             <View style={styles.infoIconBox}>
-              <Ionicons name="call" size={18} color="#64748B" />
+              <Ionicons name="call-outline" size={18} color="#64748B" />
             </View>
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Nomor Handphone</Text>
@@ -234,315 +287,152 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Stats */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Aktivitas Anda</Text>
-          {loading ? (
-            <ActivityIndicator size="small" color="#2563EB" style={{ marginTop: 20 }} />
-          ) : (
-            <View style={styles.statsGrid}>
-              <TouchableOpacity 
-                style={styles.statBox} 
-                activeOpacity={0.6}
-                onPress={() => router.push('/list?filter=Semua')}
-              >
-                <Text style={styles.statNum}>{stats.total}</Text>
-                <Text style={styles.statLabel}>Total Laporan</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#E2E8F0' }]}
-                activeOpacity={0.6}
-                onPress={() => router.push('/list?filter=Menunggu')}
-              >
-                <Text style={[styles.statNum, { color: '#D97706' }]}>{stats.pending}</Text>
-                <Text style={styles.statLabel}>Menunggu</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.statBox, { borderLeftWidth: 1, borderLeftColor: '#E2E8F0' }]}
-                activeOpacity={0.6}
-                onPress={() => router.push('/list?filter=Selesai')}
-              >
-                <Text style={[styles.statNum, { color: '#059669' }]}>{stats.finished}</Text>
-                <Text style={styles.statLabel}>Selesai</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
         {/* Settings Section */}
-        <View style={styles.settingsSection}>
+        <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Pengaturan Aplikasi</Text>
-          
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="notifications" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Notifikasi Push</Text>
-                <Text style={styles.settingDesc}>Terima pembaruan instan</Text>
-              </View>
-              <Switch 
-                value={pushNotif} 
-                onValueChange={setPushNotif}
-                trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
-                thumbColor={Platform.OS === 'android' ? '#FFFFFF' : ''}
-              />
+        </View>
+        
+        <View style={styles.card}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingIconBox}>
+              <Ionicons name="notifications-outline" size={18} color="#64748B" />
             </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="moon" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Mode Gelap</Text>
-                <Text style={styles.settingDesc}>Ubah tema aplikasi</Text>
-              </View>
-              <Switch 
-                value={darkMode} 
-                onValueChange={(val) => {
-                  setDarkMode(val);
-                  if (val) {
-                    setTimeout(() => {
-                      setDarkMode(false);
-                      Alert.alert('Info', 'Mode Gelap akan segera hadir di pembaruan selanjutnya!');
-                    }, 500);
-                  }
-                }}
-                trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
-                thumbColor={Platform.OS === 'android' ? '#FFFFFF' : ''}
-              />
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingLabel}>Notifikasi Push</Text>
+              <Text style={styles.settingDesc}>Terima pembaruan instan</Text>
             </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="finger-print" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Login Biometrik</Text>
-                <Text style={styles.settingDesc}>Sidik Jari atau Face ID</Text>
-              </View>
-              <Switch 
-                value={biometric} 
-                onValueChange={(val) => {
-                  setBiometric(val);
-                  if (val) Alert.alert('Berhasil', 'Biometrik diaktifkan untuk sesi berikutnya.');
-                }}
-                trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
-                thumbColor={Platform.OS === 'android' ? '#FFFFFF' : ''}
-              />
-            </View>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Keamanan', 'Fitur ganti kata sandi & PIN sedang dalam pengembangan.')}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="lock-closed" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Keamanan Akun</Text>
-                <Text style={styles.settingDesc}>Kata sandi & PIN</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Bahasa', 'Pilihan bahasa saat ini: Bahasa Indonesia (ID)')}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="language" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Bahasa</Text>
-                <Text style={styles.settingDesc}>Bahasa Indonesia (ID)</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => {
-              Alert.alert('Berhasil', 'Cache aplikasi sebesar 12MB telah dibersihkan dari penyimpanan.');
-            }}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="trash" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Bersihkan Cache</Text>
-                <Text style={styles.settingDesc}>Kosongkan ruang penyimpanan</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Pusat Bantuan', 'Hubungi WhatsApp CS: 0812-3456-7890\nAtau email: cs@laporwarga.id')}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="help-buoy" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Bantuan & Dukungan</Text>
-                <Text style={styles.settingDesc}>Pusat bantuan aplikasi</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Kebijakan Privasi', 'Data Anda dilindungi enkripsi end-to-end sesuai dengan UU Pelindungan Data Pribadi.')}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="shield-checkmark" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Kebijakan Privasi</Text>
-                <Text style={styles.settingDesc}>Perlindungan data pengguna</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Syarat & Ketentuan', 'Syarat dan Ketentuan penggunaan layanan Lapor Warga.')}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="document-text" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Syarat & Ketentuan</Text>
-                <Text style={styles.settingDesc}>Aturan penggunaan aplikasi</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => {
-              Share.share({ message: 'Ayo lapor keluhan di kotamu menggunakan aplikasi Lapor Warga! Download sekarang di App Store/Play Store.' });
-            }}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="share-social" size={18} color="#2563EB" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Bagikan Aplikasi</Text>
-                <Text style={styles.settingDesc}>Undang teman & keluarga</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => Alert.alert('Terima Kasih!', 'Anda akan diarahkan ke App Store/Play Store.')}>
-              <View style={[styles.settingIconBox, { borderColor: '#FEF08A', backgroundColor: '#FEFCE8' }]}>
-                <Ionicons name="star" size={18} color="#EAB308" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Beri Nilai Aplikasi</Text>
-                <Text style={styles.settingDesc}>Dukung kami dengan 5 bintang</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7} onPress={() => {
-              Alert.alert('Peringatan!', 'Apakah Anda yakin ingin menghapus akun secara permanen? Semua data pengaduan Anda akan hilang.', [
-                { text: 'Batal', style: 'cancel' },
-                { text: 'Hapus Akun', style: 'destructive', onPress: () => Alert.alert('Info', 'Akun dijadwalkan untuk dihapus dalam 30 hari.') }
-              ]);
-            }}>
-              <View style={[styles.settingIconBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-                <Ionicons name="trash-bin" size={18} color="#DC2626" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={[styles.settingLabel, { color: '#DC2626' }]}>Hapus Akun</Text>
-                <Text style={styles.settingDesc}>Hapus akun secara permanen</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <View style={styles.divider} />
-
-            <View style={styles.settingRow}>
-              <View style={styles.settingIconBox}>
-                <Ionicons name="information-circle" size={18} color="#64748B" />
-              </View>
-              <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>Versi Aplikasi</Text>
-                <Text style={styles.settingDesc}>Lapor Warga v2.1.0 (Stable)</Text>
-              </View>
-            </View>
-
+            <Switch 
+              value={pushNotif} 
+              onValueChange={setPushNotif}
+              trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
+              thumbColor="#FFFFFF"
+            />
           </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingIconBox}>
+              <Ionicons name="finger-print-outline" size={18} color="#64748B" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingLabel}>Login Biometrik</Text>
+              <Text style={styles.settingDesc}>Sidik Jari atau Face ID</Text>
+            </View>
+            <Switch 
+              value={biometric} 
+              onValueChange={(val) => {
+                setBiometric(val);
+                if (val) Alert.alert('Berhasil', 'Biometrik diaktifkan untuk sesi berikutnya.');
+              }}
+              trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={() => Alert.alert('Keamanan', 'Fitur ganti kata sandi & PIN sedang dalam pengembangan.')}>
+            <View style={styles.settingIconBox}>
+              <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingLabel}>Keamanan Akun</Text>
+              <Text style={styles.settingDesc}>Kata sandi & PIN</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={() => Alert.alert('Pusat Bantuan', 'Hubungi WhatsApp CS: 0812-3456-7890')}>
+            <View style={styles.settingIconBox}>
+              <Ionicons name="help-buoy-outline" size={18} color="#64748B" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingLabel}>Bantuan & Dukungan</Text>
+              <Text style={styles.settingDesc}>Pusat bantuan aplikasi</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.actionSection}>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} activeOpacity={0.7}>
-            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.logoutText}>Keluar Akun</Text>
+        {/* Danger Zone */}
+        <View style={[styles.card, { marginTop: 8 }]}>
+          <TouchableOpacity style={styles.settingRow} activeOpacity={0.6} onPress={handleLogout}>
+            <View style={[styles.settingIconBox, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={[styles.settingLabel, { color: '#EF4444' }]}>Keluar Akun</Text>
+              <Text style={styles.settingDesc}>Akhiri sesi Anda saat ini</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
           </TouchableOpacity>
         </View>
 
       </ScrollView>
 
       {/* Edit Profile Modal */}
-      <Modal visible={modalVisible} transparent animationType="fade">
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Profil</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setModalVisible(false)} activeOpacity={1} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Edit Profil</Text>
 
             <View style={styles.modalBody}>
-              <Text style={styles.label}>Nama Lengkap</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="person-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-                <TextInput 
-                  style={styles.input}
-                  placeholder="Masukkan nama Anda"
-                  placeholderTextColor="#CBD5E1"
-                  value={editName}
-                  onChangeText={setEditName}
-                />
+              <View style={styles.field}>
+                <Text style={styles.label}>Nama Lengkap</Text>
+                <View style={styles.inputRow}>
+                  <Ionicons name="person-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
+                  <TextInput 
+                    style={styles.input}
+                    placeholder="Masukkan nama Anda"
+                    placeholderTextColor="#CBD5E1"
+                    value={editName}
+                    onChangeText={setEditName}
+                  />
+                </View>
               </View>
 
-              <Text style={styles.label}>Nomor Induk Kependudukan (NIK)</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="card-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-                <TextInput 
-                  style={styles.input}
-                  placeholder="Contoh: 3171234567890001"
-                  placeholderTextColor="#CBD5E1"
-                  value={editNik}
-                  onChangeText={setEditNik}
-                  keyboardType="numeric"
-                  maxLength={16}
-                />
+              <View style={styles.field}>
+                <Text style={styles.label}>Nomor Induk Kependudukan</Text>
+                <View style={styles.inputRow}>
+                  <Ionicons name="card-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
+                  <TextInput 
+                    style={styles.input}
+                    placeholder="Contoh: 3171234567890001"
+                    placeholderTextColor="#CBD5E1"
+                    value={editNik}
+                    onChangeText={setEditNik}
+                    keyboardType="numeric"
+                    maxLength={16}
+                  />
+                </View>
               </View>
 
-              <Text style={styles.label}>Nomor Handphone</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="call-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-                <TextInput 
-                  style={styles.input}
-                  placeholder="Contoh: 08123456789"
-                  placeholderTextColor="#CBD5E1"
-                  value={editPhone}
-                  onChangeText={setEditPhone}
-                  keyboardType="phone-pad"
-                />
+              <View style={styles.field}>
+                <Text style={styles.label}>Nomor Handphone</Text>
+                <View style={styles.inputRow}>
+                  <Ionicons name="call-outline" size={18} color="#94A3B8" style={styles.inputIcon} />
+                  <TextInput 
+                    style={styles.input}
+                    placeholder="Contoh: 08123456789"
+                    placeholderTextColor="#CBD5E1"
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    keyboardType="phone-pad"
+                  />
+                </View>
               </View>
 
               <TouchableOpacity style={styles.saveBtn} onPress={saveProfile} disabled={saving} activeOpacity={0.8}>
-                {saving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Simpan Perubahan</Text>
+                {saving ? <ActivityIndicator color="#FFFFFF" /> : (
+                  <>
+                    <Ionicons name="save-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveBtnText}>Simpan Perubahan</Text>
+                  </>
                 )}
               </TouchableOpacity>
             </View>
@@ -556,229 +446,72 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? 40 : 32, paddingBottom: 110 },
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 36 : 16, paddingBottom: 100 },
   
+  // Header
   header: { marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '700', color: '#0F172A', letterSpacing: -0.5, marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#64748B', fontWeight: '400' },
+  title: { fontSize: 28, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5, marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#94A3B8', lineHeight: 20 },
 
-  profileCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    padding: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  avatarContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-    position: 'relative'
-  },
-  avatarImage: { width: '100%', height: '100%', borderRadius: 32 },
-  cameraIconBadge: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    backgroundColor: '#2563EB',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF'
-  },
+  // Profile Card
+  profileCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
+  avatarContainer: { width: 60, height: 60, borderRadius: 30, marginRight: 16, position: 'relative' },
+  avatarImage: { width: '100%', height: '100%', borderRadius: 30 },
+  avatarPlaceholder: { width: '100%', height: '100%', borderRadius: 30, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
+  avatarPlaceholderText: { fontSize: 20, fontWeight: '700', color: '#3B82F6' },
+  cameraIconBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#2563EB', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFFFFF' },
   userInfo: { flex: 1, justifyContent: 'center' },
-  userName: { fontSize: 19, fontWeight: '700', color: '#0F172A', marginBottom: 6 },
+  userName: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 6 },
+  roleBadgeContainer: { flexDirection: 'row' },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  roleText: { fontSize: 11, fontWeight: '700' },
+  editIconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
+
+  // Sections
+  sectionHeader: { marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+
+  // Stats Strip (Match with Home)
+  statsStrip: { flexDirection: 'row', backgroundColor: '#F8FAFC', borderRadius: 14, paddingVertical: 14, marginBottom: 24, borderWidth: 1, borderColor: '#F1F5F9' },
+  statsStripItem: { flex: 1, alignItems: 'center' },
+  statsStripDivider: { width: 1, backgroundColor: '#E2E8F0', marginVertical: 2 },
+  statsStripNum: { fontSize: 22, fontWeight: '800', color: '#0F172A', marginBottom: 1 },
+  statsStripLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+
+  // Cards
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 24 },
   
-  roleBadgeContainer: { marginTop: 4 },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#DBEAFE'
-  },
-  roleText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
-
-  editIconBtn: {
-    padding: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-
-  infoCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A', marginBottom: 20 },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  infoIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
+  // Info Rows
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  infoIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   infoTextContainer: { flex: 1 },
-  infoLabel: { fontSize: 13, color: '#64748B', marginBottom: 4, fontWeight: '500' },
-  infoValue: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
-  divider: { height: 1, backgroundColor: '#E2E8F0', marginLeft: 60, marginVertical: 4 },
+  infoLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '500', marginBottom: 2 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
+  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 12, marginLeft: 54 },
 
-  statsSection: { marginBottom: 40 },
-  statsGrid: { 
-    flexDirection: 'row', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', 
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden'
-  },
-  statBox: {
-    flex: 1,
-    paddingVertical: 24,
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC'
-  },
-  statNum: { fontSize: 26, fontWeight: '700', color: '#0F172A', marginBottom: 6 },
-  statLabel: { fontSize: 12, fontWeight: '600', color: '#64748B', textAlign: 'center' },
+  // Setting Rows
+  settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  settingIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  settingTextContainer: { flex: 1, marginRight: 12 },
+  settingLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
+  settingDesc: { fontSize: 12, color: '#94A3B8' },
 
-  settingsSection: { marginBottom: 40 },
-  settingCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  settingIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  settingTextContainer: { flex: 1, marginRight: 8 },
-  settingLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 4 },
-  settingDesc: { fontSize: 13, color: '#64748B' },
+  // Modal Overlay
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject },
+  modalSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 36 : 24 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 20 },
+  modalBody: { width: '100%' },
 
-  actionSection: { flex: 1 },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    paddingVertical: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  logoutText: {
-    marginLeft: 8,
-    color: '#DC2626',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  closeBtn: {
-    padding: 6,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
-  },
-  modalBody: {
-    width: '100%',
-  },
-  label: { fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 24,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, height: '100%', color: '#0F172A', fontSize: 16 },
-  saveBtn: {
-    backgroundColor: '#2563EB',
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  }
+  // Modal Fields
+  field: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, height: 50, borderWidth: 1, borderColor: '#F1F5F9' },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, color: '#0F172A' },
+  
+  // Modal Save
+  saveBtn: { flexDirection: 'row', backgroundColor: '#2563EB', height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  saveBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 }
 });

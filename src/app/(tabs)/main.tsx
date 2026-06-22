@@ -1,11 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Animated, Platform, Modal, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Platform, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { auth, database } from '../../../firebaseConfig';
 import { ref, push, set } from 'firebase/database';
+import { Colors } from '../../constants/Colors';
+
+const KATEGORI_LIST = [
+  { id: 'Infrastruktur', icon: 'business', color: '#3B82F6', bg: '#EFF6FF' }, 
+  { id: 'Kebersihan', icon: 'leaf', color: '#10B981', bg: '#ECFDF5' }, 
+  { id: 'Pelayanan Publik', icon: 'people', color: '#8B5CF6', bg: '#F5F3FF' }, 
+  { id: 'Keamanan', icon: 'shield-checkmark', color: '#EF4444', bg: '#FEF2F2' }, 
+  { id: 'Lainnya', icon: 'ellipsis-horizontal-circle', color: '#64748B', bg: '#F1F5F9' }
+];
 
 export default function MainScreen() {
   const [nama, setNama] = useState('');
@@ -13,9 +23,13 @@ export default function MainScreen() {
   const [kategori, setKategori] = useState('');
   const [isi, setIsi] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const router = useRouter();
+
+  const theme = Colors.light;
 
   useEffect(() => {
     if (auth.currentUser?.email) {
@@ -48,7 +62,7 @@ export default function MainScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.1, // Extra low quality for base64 optimization
+        quality: 0.1,
         base64: true,
       });
     }
@@ -58,6 +72,23 @@ export default function MainScreen() {
     }
   };
 
+  const getLocation = async () => {
+    setGettingLocation(true);
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Izin Ditolak', 'Aplikasi butuh akses lokasi untuk fitur ini.');
+        setGettingLocation(false);
+        return;
+      }
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    } catch (error) {
+      Alert.alert('Gagal', 'Tidak dapat mengambil lokasi. Pastikan GPS aktif.');
+    }
+    setGettingLocation(false);
+  };
+
   const simpanPengaduan = async () => {
     if (!nama || !judul || !isi || !kategori) {
       Alert.alert('Data Belum Lengkap', 'Harap lengkapi semua data laporan termasuk kategori.');
@@ -65,7 +96,6 @@ export default function MainScreen() {
     }
     setLoading(true);
     try {
-      // Create a timeout promise
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Koneksi lambat atau file terlalu besar. Silakan coba lagi.")), 15000)
       );
@@ -78,6 +108,7 @@ export default function MainScreen() {
           judul,
           isi,
           ...(imageBase64 ? { imageUrl: imageBase64 } : {}),
+          ...(location ? { location } : {}),
           tanggal: Date.now(),
           status: 'Menunggu'
         });
@@ -99,6 +130,7 @@ export default function MainScreen() {
       setKategori('');
       setIsi('');
       setImageBase64(null);
+      setLocation(null);
       router.push('/result');
     } catch (error: any) {
       Alert.alert('Gagal mengirim', error.message);
@@ -107,23 +139,28 @@ export default function MainScreen() {
     }
   };
 
+  const selectedCat = KATEGORI_LIST.find(c => c.id === kategori);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={s.container}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        <View style={styles.header}>
-          <Text style={styles.title}>Buat Laporan</Text>
-          <Text style={styles.subtitle}>Sampaikan aspirasi atau keluhan Anda dengan detail agar dapat segera ditindaklanjuti.</Text>
+        {/* Header */}
+        <View style={s.header}>
+          <Text style={s.headerTitle}>Buat Laporan</Text>
+          <Text style={s.headerSub}>Isi formulir di bawah untuk menyampaikan pengaduan Anda.</Text>
         </View>
 
-        <View style={styles.formSection}>
+        {/* Form */}
+        <View style={s.formCard}>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nama Pelapor</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
+          {/* Nama */}
+          <View style={s.field}>
+            <Text style={s.label}>Nama Pelapor</Text>
+            <View style={s.inputRow}>
+              <Ionicons name="person-outline" size={18} color="#94A3B8" style={s.inputIcon} />
               <TextInput 
-                style={styles.input} 
+                style={s.input} 
                 placeholder="Identitas Anda" 
                 value={nama} 
                 onChangeText={setNama} 
@@ -132,27 +169,32 @@ export default function MainScreen() {
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Kategori Pengaduan</Text>
-            <TouchableOpacity 
-              style={[styles.inputContainer, { paddingVertical: 16 }]} 
-              onPress={() => setDropdownVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="grid-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-              <Text style={[{ flex: 1, fontSize: 15, color: kategori ? '#0F172A' : '#CBD5E1' }]}>
-                {kategori || "Pilih kategori laporan..."}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color="#94A3B8" />
+          {/* Kategori */}
+          <View style={s.field}>
+            <Text style={s.label}>Kategori</Text>
+            <TouchableOpacity style={s.inputRow} onPress={() => setDropdownVisible(true)} activeOpacity={0.7}>
+              <Ionicons name="grid-outline" size={18} color="#94A3B8" style={s.inputIcon} />
+              {selectedCat ? (
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={[s.catMini, { backgroundColor: selectedCat.bg }]}>
+                    <Ionicons name={selectedCat.icon as any} size={14} color={selectedCat.color} />
+                  </View>
+                  <Text style={[s.input, { flex: 0 }]}>{kategori}</Text>
+                </View>
+              ) : (
+                <Text style={[s.input, { color: '#CBD5E1', flex: 1 }]}>Pilih kategori...</Text>
+              )}
+              <Ionicons name="chevron-down" size={18} color="#CBD5E1" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Judul Laporan</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="document-text-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
+          {/* Judul */}
+          <View style={s.field}>
+            <Text style={s.label}>Judul Laporan</Text>
+            <View style={s.inputRow}>
+              <Ionicons name="document-text-outline" size={18} color="#94A3B8" style={s.inputIcon} />
               <TextInput 
-                style={styles.input} 
+                style={s.input} 
                 placeholder="Topik singkat pengaduan" 
                 value={judul} 
                 onChangeText={setJudul} 
@@ -161,107 +203,113 @@ export default function MainScreen() {
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Rincian Kejadian</Text>
-            <View style={[styles.inputContainer, styles.textAreaContainer]}>
-              <Ionicons name="chatbox-ellipses-outline" size={20} color="#94A3B8" style={[styles.inputIcon, { marginTop: 2 }]} />
+          {/* Isi */}
+          <View style={s.field}>
+            <Text style={s.label}>Rincian Kejadian</Text>
+            <View style={s.textAreaWrap}>
               <TextInput 
-                style={[styles.input, styles.textArea]} 
-                placeholder="Uraikan detail kejadian, waktu, dan lokasi kejadian selengkap mungkin..." 
+                style={s.textArea} 
+                placeholder="Uraikan detail kejadian, lokasi, dan waktu selengkap mungkin..." 
                 value={isi} 
                 onChangeText={setIsi} 
                 multiline 
-                numberOfLines={6} 
+                numberOfLines={5}
                 placeholderTextColor="#CBD5E1"
                 textAlignVertical="top"
               />
             </View>
           </View>
 
-          {/* FOTO BUKTI SECTION */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Foto Bukti (Opsional)</Text>
-            
+          {/* Foto */}
+          <View style={s.field}>
+            <Text style={s.label}>Foto Bukti <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
             {imageBase64 ? (
-              <View style={styles.imagePreviewContainer}>
-                <Image source={{ uri: imageBase64 }} style={styles.imagePreview} />
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageBase64(null)}>
-                  <Ionicons name="close-circle" size={28} color="#EF4444" />
+              <View style={s.imagePreview}>
+                <Image source={{ uri: imageBase64 }} style={s.imagePreviewImg} />
+                <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setImageBase64(null)}>
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.imagePickerRow}>
-                <TouchableOpacity style={styles.imagePickerBtn} onPress={() => pickImage('camera')} activeOpacity={0.7}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
-                    <Ionicons name="camera" size={20} color="#2563EB" />
-                  </View>
-                  <Text style={styles.imagePickerText}>Ambil Foto</Text>
+              <View style={s.imagePickerRow}>
+                <TouchableOpacity style={s.imagePickerBtn} onPress={() => pickImage('camera')} activeOpacity={0.7}>
+                  <Ionicons name="camera-outline" size={20} color="#3B82F6" />
+                  <Text style={s.imagePickerText}>Kamera</Text>
                 </TouchableOpacity>
-                <View style={{ width: 12 }} />
-                <TouchableOpacity style={styles.imagePickerBtn} onPress={() => pickImage('gallery')} activeOpacity={0.7}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#F5F3FF' }]}>
-                    <Ionicons name="images" size={20} color="#7C3AED" />
-                  </View>
-                  <Text style={styles.imagePickerText}>Pilih Galeri</Text>
+                <TouchableOpacity style={s.imagePickerBtn} onPress={() => pickImage('gallery')} activeOpacity={0.7}>
+                  <Ionicons name="images-outline" size={20} color="#8B5CF6" />
+                  <Text style={s.imagePickerText}>Galeri</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
-          
-          <View>
-            <View style={styles.warningContainer}>
-              <Ionicons name="shield-checkmark-outline" size={16} color="#64748B" style={{marginRight: 6}} />
-              <Text style={styles.warningText}>Laporan Anda dilindungi dan bersifat rahasia.</Text>
-            </View>
-            <TouchableOpacity style={styles.button} onPress={simpanPengaduan} disabled={loading} activeOpacity={0.8}>
-              {loading ? <ActivityIndicator color="#fff" /> : (
-                <>
-                  <Ionicons name="paper-plane" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.buttonText}>Kirim Laporan</Text>
-                </>
-              )}
-            </TouchableOpacity>
+
+          {/* Lokasi */}
+          <View style={s.field}>
+            <Text style={s.label}>Lokasi Kejadian (GPS) <Text style={{ fontWeight: '400', color: '#CBD5E1' }}>(Opsional)</Text></Text>
+            {location ? (
+              <View style={s.locationPreview}>
+                <View style={s.locationInfo}>
+                  <Ionicons name="location" size={20} color="#10B981" />
+                  <Text style={s.locationText}>Tersimpan: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</Text>
+                </View>
+                <TouchableOpacity style={s.imageRemoveBtn} onPress={() => setLocation(null)}>
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={s.locationBtn} onPress={getLocation} disabled={gettingLocation} activeOpacity={0.7}>
+                {gettingLocation ? <ActivityIndicator size="small" color="#3B82F6" /> : <Ionicons name="location-outline" size={20} color="#3B82F6" />}
+                <Text style={s.locationBtnText}>{gettingLocation ? 'Mengambil titik GPS...' : 'Ambil Lokasi Saat Ini'}</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
         </View>
+
+        {/* Submit */}
+        <View style={s.submitSection}>
+          <View style={s.disclaimerRow}>
+            <Ionicons name="shield-checkmark-outline" size={14} color="#94A3B8" />
+            <Text style={s.disclaimerText}>Laporan Anda dilindungi dan bersifat rahasia.</Text>
+          </View>
+          <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.7 }]} onPress={simpanPengaduan} disabled={loading} activeOpacity={0.8}>
+            {loading ? <ActivityIndicator color="#FFF" /> : (
+              <>
+                <Ionicons name="paper-plane" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={s.submitBtnText}>Kirim Laporan</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
 
       {/* Dropdown Modal */}
       <Modal visible={dropdownVisible} transparent animationType="fade" onRequestClose={() => setDropdownVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setDropdownVisible(false)} activeOpacity={1} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pilih Kategori</Text>
-              <TouchableOpacity onPress={() => setDropdownVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
+        <View style={s.modalOverlay}>
+          <TouchableOpacity style={s.modalBackdrop} onPress={() => setDropdownVisible(false)} activeOpacity={1} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Pilih Kategori</Text>
             
-            {[
-              { id: 'Infrastruktur', icon: 'business' }, 
-              { id: 'Kebersihan', icon: 'trash-bin' }, 
-              { id: 'Pelayanan Publik', icon: 'people' }, 
-              { id: 'Keamanan', icon: 'shield-checkmark' }, 
-              { id: 'Lainnya', icon: 'ellipsis-horizontal-circle' }
-            ].map((cat) => (
-              <TouchableOpacity 
-                key={cat.id} 
-                style={styles.dropdownOption}
-                onPress={() => {
-                  setKategori(cat.id);
-                  setDropdownVisible(false);
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={[styles.dropdownIconWrap, kategori === cat.id && { backgroundColor: '#EFF6FF' }]}>
-                    <Ionicons name={cat.icon as any} size={18} color={kategori === cat.id ? '#2563EB' : '#64748B'} />
+            {KATEGORI_LIST.map((cat) => {
+              const isSelected = kategori === cat.id;
+              return (
+                <TouchableOpacity 
+                  key={cat.id} 
+                  style={[s.modalOption, isSelected && s.modalOptionActive]}
+                  onPress={() => { setKategori(cat.id); setDropdownVisible(false); }}
+                  activeOpacity={0.6}
+                >
+                  <View style={[s.modalOptionIcon, { backgroundColor: cat.bg }]}>
+                    <Ionicons name={cat.icon as any} size={18} color={cat.color} />
                   </View>
-                  <Text style={[styles.dropdownOptionText, kategori === cat.id && { color: '#2563EB', fontWeight: '700' }]}>{cat.id}</Text>
-                </View>
-                {kategori === cat.id && <Ionicons name="checkmark-circle" size={22} color="#2563EB" />}
-              </TouchableOpacity>
-            ))}
+                  <Text style={[s.modalOptionText, isSelected && { color: '#2563EB', fontWeight: '700' }]}>{cat.id}</Text>
+                  {isSelected && <Ionicons name="checkmark" size={18} color="#2563EB" />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </Modal>
@@ -270,115 +318,59 @@ export default function MainScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 110, flexGrow: 1 },
-  
-  header: { marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '800', color: '#0F172A', letterSpacing: -0.5, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#64748B', fontWeight: '400', lineHeight: 22, paddingRight: 20 },
-  
-  formSection: { flex: 1 },
-  
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 16,
-    minHeight: 56, // Ensures all inputs have the exact same base height
-  },
-  inputFocused: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  inputIcon: { marginRight: 12 },
-  textAreaContainer: { alignItems: 'flex-start', paddingTop: 16, minHeight: 140 },
-  input: { flex: 1, color: '#0F172A', fontSize: 15, paddingVertical: 0 },
-  textArea: { height: 100, textAlignVertical: 'top' },
-  
-  imagePickerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  imagePickerBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  iconCircle: {
-    width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 8
-  },
-  imagePickerText: { fontSize: 14, fontWeight: '600', color: '#334155' },
-  imagePreviewContainer: {
-    position: 'relative',
-    height: 200,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  imagePreview: { width: '100%', height: '100%', resizeMode: 'cover' },
-  removeImageBtn: {
-    position: 'absolute', top: 8, right: 8, backgroundColor: '#FFFFFF', borderRadius: 14, elevation: 2, shadowColor: '#000', shadowOffset: {width:0, height:2}, shadowOpacity: 0.2, shadowRadius: 4
-  },
+  scroll: { paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 36 : 16, paddingBottom: 100 },
 
-  warningContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  warningText: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+  // Header
+  header: { marginBottom: 20 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
+  headerSub: { fontSize: 14, color: '#94A3B8', lineHeight: 20 },
 
-  button: { flexDirection: 'row', backgroundColor: '#2563EB', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  // Form Card
+  formCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 16 },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
-    justifyContent: 'flex-end',
-  },
+  // Field
+  field: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, minHeight: 50, borderWidth: 1, borderColor: '#F1F5F9' },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, color: '#0F172A', paddingVertical: 0 },
+  catMini: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+
+  // Text Area
+  textAreaWrap: { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', padding: 12 },
+  textArea: { fontSize: 15, color: '#0F172A', minHeight: 100, textAlignVertical: 'top', lineHeight: 22 },
+
+  // Image & Location Picker
+  imagePickerRow: { flexDirection: 'row', gap: 10 },
+  imagePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingVertical: 12, borderWidth: 1, borderColor: '#F1F5F9', gap: 6 },
+  imagePickerText: { fontSize: 14, fontWeight: '600', color: '#475569' },
+  imagePreview: { position: 'relative', height: 160, borderRadius: 12, overflow: 'hidden' },
+  imagePreviewImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  imageRemoveBtn: { position: 'absolute', top: 6, right: 6, backgroundColor: '#FFFFFF', borderRadius: 12 },
+
+  locationBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingVertical: 12, borderWidth: 1, borderColor: '#F1F5F9', gap: 6 },
+  locationBtnText: { fontSize: 14, fontWeight: '600', color: '#3B82F6' },
+  locationPreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#D1FAE5' },
+  locationInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  locationText: { fontSize: 13, color: '#047857', fontWeight: '500' },
+
+  // Submit
+  submitSection: { marginTop: 4 },
+  disclaimerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 5 },
+  disclaimerText: { fontSize: 12, color: '#94A3B8' },
+  submitBtn: { flexDirection: 'row', backgroundColor: '#2563EB', height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  submitBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  closeBtn: {
-    padding: 6,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
-  },
-  dropdownOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC'
-  },
-  dropdownIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  dropdownOptionText: { fontSize: 15, color: '#475569', fontWeight: '500' },
+  modalSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 36 : 20 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 14 },
+  modalOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  modalOptionActive: { backgroundColor: '#F8FAFC', marginHorizontal: -20, paddingHorizontal: 20, borderRadius: 0 },
+  modalOptionIcon: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  modalOptionText: { flex: 1, fontSize: 15, fontWeight: '500', color: '#475569' },
 });

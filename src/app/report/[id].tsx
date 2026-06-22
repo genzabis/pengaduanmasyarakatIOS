@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Modal, Pressable, Alert, TextInput, KeyboardAvoidingView, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, Modal, Pressable, Alert, TextInput, KeyboardAvoidingView, Animated, Image, useColorScheme, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, database } from '../../../firebaseConfig';
-import { ref, onValue, update, push, set } from 'firebase/database';
+import { ref, onValue, update, push, set, remove } from 'firebase/database';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Colors } from '../../constants/Colors';
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -29,6 +30,9 @@ export default function ReportDetailScreen() {
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, {type: 'me' | 'everyone', timeoutId: any}>>({});
   
   const isAdmin = auth.currentUser?.email === 'admin@gmail.com';
+
+  const isDark = false;
+  const theme = Colors.light;
 
   const CUSTOM_LOW_QUALITY_M4A = {
     isMeteringEnabled: true,
@@ -122,6 +126,31 @@ export default function ReportDetailScreen() {
     } catch (e) {
       console.log('Update status error', e);
     }
+  };
+
+  const handleDeleteReport = () => {
+    Alert.alert(
+      "Hapus Laporan",
+      "Yakin ingin menghapus laporan ini secara permanen?",
+      [
+        { text: "Batal", style: "cancel" },
+        { 
+          text: "Hapus", 
+          style: "destructive",
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await remove(ref(database, `pengaduan/${id}`));
+              Alert.alert("Dihapus", "Laporan berhasil dihapus.");
+              router.replace('/(tabs)/list');
+            } catch (err: any) {
+              Alert.alert("Gagal", err.message);
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleExportPDF = async () => {
@@ -494,25 +523,25 @@ export default function ReportDetailScreen() {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'Selesai') return { bg: '#F0FDF4', color: '#16A34A', border: '#DCFCE7' };
-    if (status === 'Diproses') return { bg: '#EFF6FF', color: '#2563EB', border: '#DBEAFE' };
-    return { bg: '#FEFCE8', color: '#CA8A04', border: '#FEF08A' };
+    if (status === 'Selesai') return { bg: isDark ? '#14532D' : '#F0FDF4', color: isDark ? '#4ADE80' : '#16A34A', border: isDark ? '#166534' : '#DCFCE7' };
+    if (status === 'Diproses') return { bg: isDark ? '#1E3A8A' : '#EFF6FF', color: isDark ? '#60A5FA' : '#2563EB', border: isDark ? '#1D4ED8' : '#DBEAFE' };
+    return { bg: isDark ? '#713F12' : '#FEFCE8', color: isDark ? '#FACC15' : '#CA8A04', border: isDark ? '#854D0E' : '#FEF08A' };
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#2563EB" />
+      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="small" color={theme.tint} />
       </SafeAreaView>
     );
   }
 
   if (!report) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Laporan tidak ditemukan.</Text>
-        <TouchableOpacity style={styles.backBtnError} onPress={() => router.back()}>
-          <Text style={styles.backBtnErrorText}>Kembali</Text>
+      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <Text style={[styles.errorText, { color: theme.textSecondary }]}>Laporan tidak ditemukan.</Text>
+        <TouchableOpacity style={[styles.backBtnError, { backgroundColor: theme.inputBackground }]} onPress={() => router.back()}>
+          <Text style={[styles.backBtnErrorText, { color: theme.text }]}>Kembali</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -524,23 +553,15 @@ export default function ReportDetailScreen() {
   const isSelesai = report.status === 'Selesai';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: theme.divider }]}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Detail Laporan</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Detail Laporan</Text>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconBtn} onPress={handleExportPDF}>
-              <Ionicons name="download-outline" size={22} color="#0F172A" />
-            </TouchableOpacity>
-            {isAdmin && (
-              <TouchableOpacity style={styles.headerAdminBtn} onPress={() => setModalVisible(true)}>
-                <Text style={styles.headerAdminBtnText}>Kelola Status</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
 
@@ -552,103 +573,148 @@ export default function ReportDetailScreen() {
           onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
         >
         
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={styles.cardHeader}>
             <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg, borderColor: statusCfg.border }]}>
               <Text style={[styles.statusText, { color: statusCfg.color }]}>{report.status}</Text>
             </View>
-            <Text style={styles.dateText}>
+            <Text style={[styles.dateText, { color: theme.textSecondary }]}>
               {new Date(report.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
 
           <View style={styles.cardBody}>
             {report.kategori && (
-              <View style={styles.catBadge}>
-                <Text style={styles.catText}>{report.kategori}</Text>
+              <View style={[styles.catBadge, { backgroundColor: theme.inputBackground }]}>
+                <Text style={[styles.catText, { color: theme.textSecondary }]}>{report.kategori}</Text>
               </View>
             )}
-            <Text style={styles.title}>{report.judul}</Text>
+            <Text style={[styles.title, { color: theme.text }]}>{report.judul}</Text>
             
-            <View style={styles.reporterBox}>
-              <Text style={styles.reporterLabel}>Dilaporkan oleh</Text>
-              <Text style={styles.reporterName}>{report.nama}</Text>
+            <View style={[styles.reporterBox, { backgroundColor: theme.inputBackground }]}>
+              <Text style={[styles.reporterLabel, { color: theme.textSecondary }]}>Dilaporkan oleh</Text>
+              <Text style={[styles.reporterName, { color: theme.text }]}>{report.nama}</Text>
             </View>
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
             
-            <Text style={styles.descLabel}>DESKRIPSI</Text>
-            <Text style={styles.description}>{report.isi}</Text>
+            <Text style={[styles.descLabel, { color: theme.textSecondary }]}>DESKRIPSI</Text>
+            <Text style={[styles.description, { color: theme.text }]}>{report.isi}</Text>
 
             {report.imageUrl && (
               <View style={styles.proofImageContainer}>
-                <Text style={styles.descLabel}>FOTO BUKTI</Text>
-                <Image source={{ uri: report.imageUrl }} style={styles.proofImage} />
+                <Text style={[styles.descLabel, { color: theme.textSecondary }]}>FOTO BUKTI</Text>
+                <Image source={{ uri: report.imageUrl }} style={[styles.proofImage, { borderColor: theme.border }]} />
+              </View>
+            )}
+
+            {report.location && (
+              <View style={styles.locationContainer}>
+                <Text style={[styles.descLabel, { color: theme.textSecondary }]}>LOKASI KEJADIAN (GPS)</Text>
+                <View style={[styles.locationCard, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5', borderColor: isDark ? '#047857' : '#D1FAE5' }]}>
+                  <View style={styles.locationInfo}>
+                    <Ionicons name="location" size={24} color="#10B981" />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={[styles.locationText, { color: isDark ? '#6EE7B7' : '#047857' }]}>Titik Kordinat</Text>
+                      <Text style={[styles.locationSubText, { color: isDark ? '#A7F3D0' : '#059669' }]}>{report.location.latitude.toFixed(5)}, {report.location.longitude.toFixed(5)}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.locationBtn, { backgroundColor: isDark ? '#047857' : '#10B981' }]} 
+                    onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${report.location.latitude},${report.location.longitude}`)}
+                  >
+                    <Text style={styles.locationBtnText}>Buka Maps</Text>
+                    <Ionicons name="open-outline" size={14} color="#FFFFFF" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
             {report.tanggapan && (
-              <View style={styles.adminTanggapanBox}>
+              <View style={[styles.adminTanggapanBox, { backgroundColor: isDark ? '#072E5A' : '#F0F9FF', borderColor: isDark ? '#0F529E' : '#E0F2FE' }]}>
                 <View style={styles.adminTanggapanHeader}>
-                  <Ionicons name="chatbubble-ellipses" size={16} color="#0284C7" style={{marginRight: 6}} />
-                  <Text style={styles.adminTanggapanTitle}>Tanggapan Petugas</Text>
+                  <Ionicons name="chatbubble-ellipses" size={16} color={isDark ? '#60A5FA' : '#0284C7'} style={{marginRight: 6}} />
+                  <Text style={[styles.adminTanggapanTitle, { color: isDark ? '#60A5FA' : '#0284C7' }]}>Tanggapan Petugas</Text>
                 </View>
-                <Text style={styles.adminTanggapanText}>{report.tanggapan}</Text>
+                <Text style={[styles.adminTanggapanText, { color: isDark ? '#93C5FD' : '#0369A1' }]}>{report.tanggapan}</Text>
               </View>
             )}
+
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+            
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity style={[styles.actionBtnFull, { backgroundColor: isDark ? '#1E3A8A' : '#EFF6FF', borderColor: isDark ? '#1D4ED8' : '#BFDBFE' }]} onPress={handleExportPDF}>
+                <Ionicons name="download-outline" size={18} color={theme.tint} style={{marginRight: 8}} />
+                <Text style={[styles.actionBtnFullText, { color: theme.tint }]}>Download Bukti Laporan (PDF)</Text>
+              </TouchableOpacity>
+
+              {isAdmin && (
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity style={styles.adminActionBtnPrimary} onPress={() => setModalVisible(true)}>
+                    <Ionicons name="create-outline" size={18} color="#FFFFFF" style={{marginRight: 6}} />
+                    <Text style={styles.adminActionBtnPrimaryText}>Kelola Status</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={[styles.adminActionBtnDanger, { backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }]} onPress={handleDeleteReport}>
+                    <Ionicons name="trash-outline" size={18} color={theme.errorText} style={{marginRight: 6}} />
+                    <Text style={[styles.adminActionBtnDangerText, { color: theme.errorText }]}>Hapus</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
-        <Text style={styles.timelineTitle}>Riwayat Status</Text>
-        <View style={styles.timelineCard}>
+        <Text style={[styles.timelineTitle, { color: theme.text }]}>Riwayat Status</Text>
+        <View style={[styles.timelineCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           
           {/* Step 1 */}
           <View style={styles.timelineItem}>
             <View style={styles.timelineIconContainer}>
-              <View style={[styles.timelineIcon, isMenunggu ? styles.timelineIconActive : {}]}>
-                <Ionicons name="document-text" size={14} color={isMenunggu ? "#FFFFFF" : "#CBD5E1"} />
+              <View style={[styles.timelineIcon, { backgroundColor: theme.inputBackground }, isMenunggu ? styles.timelineIconActive : {}]}>
+                <Ionicons name="document-text" size={14} color={isMenunggu ? "#FFFFFF" : theme.icon} />
               </View>
-              <View style={[styles.timelineLine, isDiproses ? styles.timelineLineActive : {}]} />
+              <View style={[styles.timelineLine, { backgroundColor: theme.inputBackground }, isDiproses ? styles.timelineLineActive : {}]} />
             </View>
             <View style={styles.timelineContent}>
-              <Text style={[styles.timelineState, isMenunggu ? styles.textActive : {}]}>Diterima</Text>
-              <Text style={styles.timelineDesc}>Laporan masuk ke dalam sistem antrean.</Text>
+              <Text style={[styles.timelineState, { color: theme.textSecondary }, isMenunggu ? styles.textActive : {}]}>Diterima</Text>
+              <Text style={[styles.timelineDesc, { color: theme.textSecondary }]}>Laporan masuk ke dalam sistem antrean.</Text>
             </View>
           </View>
 
           {/* Step 2 */}
           <View style={styles.timelineItem}>
             <View style={styles.timelineIconContainer}>
-              <View style={[styles.timelineIcon, isDiproses ? styles.timelineIconActive : {}]}>
-                <Ionicons name="sync" size={14} color={isDiproses ? "#FFFFFF" : "#CBD5E1"} />
+              <View style={[styles.timelineIcon, { backgroundColor: theme.inputBackground }, isDiproses ? styles.timelineIconActive : {}]}>
+                <Ionicons name="sync" size={14} color={isDiproses ? "#FFFFFF" : theme.icon} />
               </View>
-              <View style={[styles.timelineLine, isSelesai ? styles.timelineLineActive : {}]} />
+              <View style={[styles.timelineLine, { backgroundColor: theme.inputBackground }, isSelesai ? styles.timelineLineActive : {}]} />
             </View>
             <View style={styles.timelineContent}>
-              <Text style={[styles.timelineState, isDiproses ? styles.textActive : {}]}>Sedang Diproses</Text>
-              <Text style={styles.timelineDesc}>Petugas sedang meninjau dan menindaklanjuti.</Text>
+              <Text style={[styles.timelineState, { color: theme.textSecondary }, isDiproses ? styles.textActive : {}]}>Sedang Diproses</Text>
+              <Text style={[styles.timelineDesc, { color: theme.textSecondary }]}>Petugas sedang meninjau dan menindaklanjuti.</Text>
             </View>
           </View>
 
           {/* Step 3 */}
           <View style={[styles.timelineItem, { paddingBottom: 0 }]}>
             <View style={styles.timelineIconContainer}>
-              <View style={[styles.timelineIcon, isSelesai ? styles.timelineIconSuccess : {}]}>
-                <Ionicons name="checkmark" size={14} color={isSelesai ? "#FFFFFF" : "#CBD5E1"} />
+              <View style={[styles.timelineIcon, { backgroundColor: theme.inputBackground }, isSelesai ? styles.timelineIconSuccess : {}]}>
+                <Ionicons name="checkmark" size={14} color={isSelesai ? "#FFFFFF" : theme.icon} />
               </View>
             </View>
             <View style={styles.timelineContent}>
-              <Text style={[styles.timelineState, isSelesai ? styles.textSuccess : {}]}>Selesai</Text>
-              <Text style={styles.timelineDesc}>Tindak lanjut telah diselesaikan.</Text>
+              <Text style={[styles.timelineState, { color: theme.textSecondary }, isSelesai ? styles.textSuccess : {}]}>Selesai</Text>
+              <Text style={[styles.timelineDesc, { color: theme.textSecondary }]}>Tindak lanjut telah diselesaikan.</Text>
             </View>
           </View>
 
         </View>
 
-        <Text style={styles.timelineTitle}>Diskusi Laporan</Text>
+        <Text style={[styles.timelineTitle, { color: theme.text }]}>Diskusi Laporan</Text>
         <View style={styles.chatContainer}>
           {messages.length === 0 ? (
-            <Text style={styles.emptyChatText}>Belum ada diskusi. Kirim pesan untuk bertanya ke petugas.</Text>
+            <Text style={[styles.emptyChatText, { color: theme.textSecondary }]}>Belum ada diskusi. Kirim pesan untuk bertanya ke petugas.</Text>
           ) : (
             messages.map(msg => {
               if (msg.deletedFor && msg.deletedFor.includes(auth.currentUser?.email)) return null;
@@ -664,6 +730,8 @@ export default function ReportDetailScreen() {
                     setSelectedMessageForAction(msg);
                     setActionModalVisible(true);
                   }}
+                  theme={theme}
+                  isDark={isDark}
                 />
               );
             })
@@ -672,22 +740,22 @@ export default function ReportDetailScreen() {
 
       </ScrollView>
 
-      <View style={styles.chatInputContainer}>
+      <View style={[styles.chatInputContainer, { backgroundColor: theme.card, borderTopColor: theme.divider }]}>
         <TextInput
-          style={styles.chatInput}
+          style={[styles.chatInput, { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text }]}
           placeholder={isRecording ? "Merekam suara..." : "Tulis pesan..."}
-          placeholderTextColor={isRecording ? "#DC2626" : "#94A3B8"}
+          placeholderTextColor={isRecording ? theme.errorText : theme.icon}
           value={newMessage}
           onChangeText={setNewMessage}
           multiline
           editable={!isRecording && !uploadingVN}
         />
         {uploadingVN ? (
-          <ActivityIndicator color="#2563EB" style={{ marginHorizontal: 12, marginBottom: 12 }} />
+          <ActivityIndicator color={theme.tint} style={{ marginHorizontal: 12, marginBottom: 12 }} />
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
-              style={[styles.chatMicBtn, isRecording ? { backgroundColor: '#DC2626', transform: [{ scale: 1.1 }] } : {}]} 
+              style={[styles.chatMicBtn, { backgroundColor: theme.inputBackground }, isRecording ? { backgroundColor: theme.errorText, transform: [{ scale: 1.1 }] } : {}]} 
               onPressIn={startRecording}
               onPressOut={stopRecording}
               activeOpacity={0.7}
@@ -695,7 +763,7 @@ export default function ReportDetailScreen() {
               <Ionicons 
                 name={isRecording ? "mic" : "mic-outline"} 
                 size={20} 
-                color={isRecording ? "#FFFFFF" : "#64748B"} 
+                color={isRecording ? "#FFFFFF" : theme.icon} 
               />
             </TouchableOpacity>
 
@@ -719,36 +787,36 @@ export default function ReportDetailScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <Pressable style={styles.modalBackdrop} onPress={() => setModalVisible(false)} />
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Perbarui Status</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Perbarui Status</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color="#64748B" />
+                <Ionicons name="close" size={24} color={theme.icon} />
               </TouchableOpacity>
             </View>
 
             {['Menunggu', 'Diproses', 'Selesai'].map(statusOption => {
               const isActive = (selectedStatus || report.status) === statusOption;
               return (
-                <TouchableOpacity key={statusOption} style={styles.statusOption} onPress={() => setSelectedStatus(statusOption)}>
+                <TouchableOpacity key={statusOption} style={[styles.statusOption, { borderBottomColor: theme.divider }]} onPress={() => setSelectedStatus(statusOption)}>
                   <View style={styles.statusOptionTextWrap}>
-                    <Text style={styles.statusOptionTitle}>{statusOption}</Text>
-                    <Text style={styles.statusOptionDesc}>
+                    <Text style={[styles.statusOptionTitle, { color: theme.text }]}>{statusOption}</Text>
+                    <Text style={[styles.statusOptionDesc, { color: theme.textSecondary }]}>
                       {statusOption === 'Menunggu' ? 'Kembalikan ke antrean awal' : statusOption === 'Diproses' ? 'Sedang ditindaklanjuti' : 'Laporan tuntas'}
                     </Text>
                   </View>
-                  {isActive && <Ionicons name="checkmark" size={20} color="#0F172A" />}
+                  {isActive && <Ionicons name="checkmark" size={20} color={theme.text} />}
                 </TouchableOpacity>
               )
             })}
 
             {selectedStatus && (
               <View style={styles.tanggapanInputContainer}>
-                <Text style={styles.tanggapanLabel}>CATATAN PETUGAS (Opsional)</Text>
+                <Text style={[styles.tanggapanLabel, { color: theme.textSecondary }]}>CATATAN PETUGAS (Opsional)</Text>
                 <TextInput
-                  style={styles.tanggapanInput}
+                  style={[styles.tanggapanInput, { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text }]}
                   placeholder="Ketik pesan untuk pelapor..."
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.icon}
                   value={adminTanggapan}
                   onChangeText={setAdminTanggapan}
                   multiline
@@ -766,16 +834,16 @@ export default function ReportDetailScreen() {
       <Modal animationType="fade" transparent={true} visible={actionModalVisible} onRequestClose={() => setActionModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setActionModalVisible(false)} />
-          <View style={styles.actionModalContent}>
+          <View style={[styles.actionModalContent, { backgroundColor: theme.card }]}>
             <TouchableOpacity style={styles.actionOption} onPress={handleDeleteForMe}>
-              <Ionicons name="trash-outline" size={20} color="#0F172A" />
-              <Text style={styles.actionOptionText}>Hapus untuk saya</Text>
+              <Ionicons name="trash-outline" size={20} color={theme.text} />
+              <Text style={[styles.actionOptionText, { color: theme.text }]}>Hapus untuk saya</Text>
             </TouchableOpacity>
             
             {(selectedMessageForAction?.senderEmail === auth.currentUser?.email || isAdmin) && !selectedMessageForAction?.isDeletedForEveryone && (
-              <TouchableOpacity style={[styles.actionOption, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]} onPress={handleDeleteForEveryone}>
-                <Ionicons name="trash-bin-outline" size={20} color="#EF4444" />
-                <Text style={[styles.actionOptionText, { color: '#EF4444' }]}>Hapus untuk semua</Text>
+              <TouchableOpacity style={[styles.actionOption, { borderTopWidth: 1, borderTopColor: theme.divider }]} onPress={handleDeleteForEveryone}>
+                <Ionicons name="trash-bin-outline" size={20} color={theme.errorText} />
+                <Text style={[styles.actionOptionText, { color: theme.errorText }]}>Hapus untuk semua</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -797,11 +865,11 @@ export default function ReportDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  errorText: { fontSize: 15, color: '#64748B', marginBottom: 16 },
-  backBtnError: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F1F5F9', borderRadius: 8 },
-  backBtnErrorText: { color: '#0F172A', fontWeight: '600', fontSize: 14 },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { fontSize: 15, marginBottom: 16 },
+  backBtnError: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  backBtnErrorText: { fontWeight: '600', fontSize: 14 },
 
   header: { 
     flexDirection: 'row', 
@@ -810,109 +878,85 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, 
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC'
   },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
+  headerTitle: { fontSize: 16, fontWeight: '600' },
   headerRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minWidth: 60 },
-  iconBtn: { padding: 8, marginRight: 4, backgroundColor: '#F1F5F9', borderRadius: 20 },
-  headerAdminBtn: { backgroundColor: '#EFF6FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  headerAdminBtnText: { color: '#2563EB', fontSize: 12, fontWeight: '700' },
   
   scrollContent: { padding: 24, paddingBottom: 40 },
   
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 32
-  },
+  card: { borderRadius: 16, padding: 20, borderWidth: 1, marginBottom: 32 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
   statusText: { fontSize: 11, fontWeight: '600' },
-  dateText: { fontSize: 12, color: '#94A3B8' },
+  dateText: { fontSize: 12 },
   
   cardBody: {},
-  catBadge: { alignSelf: 'flex-start', backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 12 },
-  catText: { fontSize: 11, fontWeight: '600', color: '#64748B', textTransform: 'uppercase' },
-  title: { fontSize: 20, fontWeight: '700', color: '#0F172A', marginBottom: 16, lineHeight: 28 },
+  catBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 12 },
+  catText: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 16, lineHeight: 28 },
   
-  reporterBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8 },
-  reporterLabel: { fontSize: 11, color: '#64748B', fontWeight: '500', marginBottom: 2 },
-  reporterName: { fontSize: 14, color: '#0F172A', fontWeight: '600' },
+  reporterBox: { padding: 12, borderRadius: 8 },
+  reporterLabel: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
+  reporterName: { fontSize: 14, fontWeight: '600' },
   
-  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 20 },
+  divider: { height: 1, marginVertical: 20 },
   
-  descLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginBottom: 8 },
-  description: { fontSize: 15, color: '#475569', lineHeight: 24 },
+  descLabel: { fontSize: 11, fontWeight: '600', marginBottom: 8 },
+  description: { fontSize: 15, lineHeight: 24 },
 
   proofImageContainer: { marginTop: 24 },
-  proofImage: { width: '100%', height: 200, borderRadius: 12, resizeMode: 'cover', borderWidth: 1, borderColor: '#E2E8F0' },
+  proofImage: { width: '100%', height: 200, borderRadius: 12, borderWidth: 1, marginTop: 8 },
 
-  adminTanggapanBox: {
-    backgroundColor: '#F0F9FF',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: '#E0F2FE'
-  },
+  locationContainer: { marginTop: 24 },
+  locationCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 8 },
+  locationInfo: { flexDirection: 'row', alignItems: 'center' },
+  locationText: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  locationSubText: { fontSize: 12 },
+  locationBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  locationBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  
+  adminTanggapanBox: { padding: 16, borderRadius: 12, marginTop: 24, borderWidth: 1 },
   adminTanggapanHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  adminTanggapanTitle: { fontSize: 13, fontWeight: '700', color: '#0284C7' },
-  adminTanggapanText: { fontSize: 14, color: '#0369A1', lineHeight: 22 },
+  adminTanggapanTitle: { fontSize: 13, fontWeight: '700' },
+  adminTanggapanText: { fontSize: 14, lineHeight: 22 },
 
-  timelineTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A', marginBottom: 16 },
-  timelineCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 32
-  },
+  timelineTitle: { fontSize: 16, fontWeight: '600', marginBottom: 16 },
+  timelineCard: { borderRadius: 16, padding: 24, borderWidth: 1, marginBottom: 32 },
   timelineItem: { flexDirection: 'row', paddingBottom: 24 },
   timelineIconContainer: { alignItems: 'center', width: 24, marginRight: 16 },
-  timelineIcon: { 
-    width: 24, height: 24, borderRadius: 12, 
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
-    zIndex: 2
-  },
+  timelineIcon: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   timelineIconActive: { backgroundColor: '#2563EB' },
   timelineIconSuccess: { backgroundColor: '#16A34A' },
-  timelineLine: { width: 2, flex: 1, backgroundColor: '#F1F5F9', marginTop: -4, marginBottom: -4, zIndex: 1 },
+  timelineLine: { width: 2, flex: 1, marginTop: -4, marginBottom: -4, zIndex: 1 },
   timelineLineActive: { backgroundColor: '#2563EB' },
   
   timelineContent: { flex: 1, paddingTop: 2 },
-  timelineState: { fontSize: 14, fontWeight: '600', color: '#64748B', marginBottom: 4 },
+  timelineState: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
   textActive: { color: '#2563EB' },
   textSuccess: { color: '#16A34A' },
-  timelineDesc: { fontSize: 13, color: '#94A3B8', lineHeight: 20 },
+  timelineDesc: { fontSize: 13, lineHeight: 20 },
 
-  chatContainer: { 
-    paddingBottom: 8,
-    marginTop: 8
-  },
-  emptyChatText: { textAlign: 'center', color: '#94A3B8', fontStyle: 'italic', marginVertical: 16, fontSize: 13 },
-  chatBubbleWrap: { marginBottom: 12, maxWidth: '85%' },
+  chatContainer: { paddingBottom: 16, marginTop: 12, paddingHorizontal: 4 },
+  emptyChatText: { textAlign: 'center', fontStyle: 'italic', marginVertical: 16, fontSize: 13, color: '#94A3B8' },
+  chatBubbleWrap: { marginBottom: 10, maxWidth: '82%' },
   chatBubbleRight: { alignSelf: 'flex-end' },
   chatBubbleLeft: { alignSelf: 'flex-start' },
-  chatSenderName: { fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 4, marginLeft: 8 },
-  chatBubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  chatSenderName: { fontSize: 11, fontWeight: '700', marginBottom: 2, marginLeft: 6, color: '#64748B' },
+  chatBubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20 },
   chatBubbleMe: { backgroundColor: '#2563EB', borderBottomRightRadius: 4 },
-  chatBubbleThem: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
-  chatText: { fontSize: 14, lineHeight: 20 },
+  chatBubbleThem: { backgroundColor: '#F1F5F9', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E2E8F0' },
+  chatTextMe: { fontSize: 15, lineHeight: 21, color: '#FFFFFF' },
+  chatTextThem: { fontSize: 15, lineHeight: 21, color: '#0F172A' },
   chatTimeContainer: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
-  chatTime: { fontSize: 10 },
+  chatTimeMe: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
+  chatTimeThem: { fontSize: 10, color: '#94A3B8' },
 
   chatInputContainer: { 
     flexDirection: 'row', 
     paddingHorizontal: 16, 
     paddingVertical: 12, 
     borderTopWidth: 1, 
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
     alignItems: 'flex-end',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -920,126 +964,45 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5
   },
-  chatInput: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    maxHeight: 100,
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    fontSize: 14,
-    color: '#0F172A'
-  },
-  chatMicBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  chatSendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-    marginBottom: 0
-  },
+  chatInput: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, maxHeight: 100, minHeight: 44, borderWidth: 1, fontSize: 14 },
+  chatMicBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
+  chatSendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginLeft: 8, marginBottom: 0 },
 
-  // Modal Minimalist
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.4)' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
   closeModalBtn: { padding: 4 },
   
-  statusOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#F1F5F9'
-  },
+  statusOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth },
   statusOptionTextWrap: { flex: 1 },
-  statusOptionTitle: { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
-  statusOptionDesc: { fontSize: 13, color: '#64748B' },
+  statusOptionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  statusOptionDesc: { fontSize: 13 },
   
   tanggapanInputContainer: { marginTop: 24 },
-  tanggapanLabel: { fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 8 },
-  tanggapanInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: '#0F172A',
-    minHeight: 80,
-    textAlignVertical: 'top'
-  },
-  saveModalBtn: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16
-  },
+  tanggapanLabel: { fontSize: 11, fontWeight: '600', marginBottom: 8 },
+  tanggapanInput: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, minHeight: 80, textAlignVertical: 'top' },
+  saveModalBtn: { backgroundColor: '#2563EB', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 16 },
   saveModalBtnText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
 
-  actionModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 8,
-    marginHorizontal: 24,
-    marginBottom: Platform.OS === 'ios' ? 40 : 24,
-    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8
-  },
+  actionModalContent: { borderRadius: 16, paddingVertical: 8, marginHorizontal: 24, marginBottom: Platform.OS === 'ios' ? 40 : 24, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8 },
   actionOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 24 },
-  actionOptionText: { fontSize: 16, color: '#0F172A', fontWeight: '500', marginLeft: 16 },
+  actionOptionText: { fontSize: 16, fontWeight: '500', marginLeft: 16 },
   
-  snackbarContainer: {
-    position: 'absolute',
-    bottom: 90,
-    left: 24,
-    right: 24,
-    backgroundColor: '#334155',
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6
-  },
+  snackbarContainer: { position: 'absolute', bottom: 90, left: 24, right: 24, backgroundColor: '#334155', borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
   snackbarText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
   snackbarUndoText: { color: '#60A5FA', fontSize: 14, fontWeight: '700' },
+  
+  actionBtnFull: { flexDirection: 'row', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 8, borderWidth: 1 },
+  actionBtnFullText: { fontWeight: '600', fontSize: 14 },
+  adminActionBtnPrimary: { flex: 1, flexDirection: 'row', backgroundColor: '#2563EB', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  adminActionBtnPrimaryText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+  adminActionBtnDanger: { flex: 1, flexDirection: 'row', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  adminActionBtnDangerText: { fontWeight: '600', fontSize: 14 }
 });
 
-const AnimatedChatBubble = ({ msg, isMe, onLongPress }: { msg: any, isMe: boolean, onLongPress: () => void }) => {
+const AnimatedChatBubble = ({ msg, isMe, onLongPress, theme, isDark }: { msg: any, isMe: boolean, onLongPress: () => void, theme: any, isDark: boolean }) => {
   const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
 
@@ -1072,33 +1035,30 @@ const AnimatedChatBubble = ({ msg, isMe, onLongPress }: { msg: any, isMe: boolea
         style={[
           styles.chatBubble, 
           isMe ? styles.chatBubbleMe : styles.chatBubbleThem,
-          msg.isDeletedForEveryone ? { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' } : {}
+          msg.isDeletedForEveryone ? { backgroundColor: theme.inputBackground, borderWidth: 1, borderColor: theme.border } : {}
         ]}
       >
         
         {msg.isDeletedForEveryone ? (
-          <Text style={[styles.chatText, { color: '#94A3B8', fontStyle: 'italic' }]}>
+          <Text style={[isMe ? styles.chatTextMe : styles.chatTextThem, { color: theme.textSecondary, fontStyle: 'italic' }]}>
             🚫 Pesan ini telah dihapus
           </Text>
         ) : msg.audioUrl ? (
-          <AudioPlayer url={msg.audioUrl} isMe={isMe} />
+          <AudioPlayer url={msg.audioUrl} isMe={isMe} isDark={isDark} />
         ) : (
-          <Text style={[styles.chatText, isMe ? {color: '#FFF'} : {color: '#0F172A'}]}>{msg.text}</Text>
+          <Text style={isMe ? styles.chatTextMe : styles.chatTextThem}>{msg.text}</Text>
         )}
 
         <View style={styles.chatTimeContainer}>
-          <Text style={[styles.chatTime, isMe && !msg.isDeletedForEveryone ? {color: 'rgba(255,255,255,0.8)'} : {color: '#94A3B8'}]}>
+          <Text style={isMe && !msg.isDeletedForEveryone ? styles.chatTimeMe : styles.chatTimeThem}>
             {new Date(msg.timestamp).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
           </Text>
           {isMe && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 6 }}>
-              <Text style={{fontSize: 9, color: msg.isDeletedForEveryone ? '#94A3B8' : 'rgba(255,255,255,0.8)', marginRight: 2}}>
-                {msg.read ? "Terlihat" : "Terkirim"}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
               <Ionicons 
                 name={msg.read ? "checkmark-done" : "checkmark"} 
                 size={14} 
-                color={msg.read ? "#94A3B8" : "#93C5FD"} 
+                color={msg.read ? "#60A5FA" : "rgba(255,255,255,0.7)"} 
               />
             </View>
           )}
@@ -1108,7 +1068,7 @@ const AnimatedChatBubble = ({ msg, isMe, onLongPress }: { msg: any, isMe: boolea
   );
 };
 
-const AudioPlayer = ({ url, isMe }: { url: string, isMe: boolean }) => {
+const AudioPlayer = ({ url, isMe, isDark }: { url: string, isMe: boolean, isDark: boolean }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -1170,10 +1130,10 @@ const AudioPlayer = ({ url, isMe }: { url: string, isMe: boolean }) => {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', width: 160, paddingVertical: 4 }}>
       <TouchableOpacity onPress={playPause} style={{ marginRight: 8 }}>
-        <Ionicons name={isPlaying ? "pause-circle" : "play-circle"} size={32} color={isMe ? "#FFFFFF" : "#2563EB"} />
+        <Ionicons name={isPlaying ? "pause-circle" : "play-circle"} size={32} color={isMe ? "#FFFFFF" : (isDark ? "#60A5FA" : "#2563EB")} />
       </TouchableOpacity>
-      <View style={{ flex: 1, height: 4, backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : '#E2E8F0', borderRadius: 2 }}>
-        <View style={{ width: `${progress * 100}%`, height: '100%', backgroundColor: isMe ? '#FFFFFF' : '#2563EB', borderRadius: 2 }} />
+      <View style={{ flex: 1, height: 4, backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : (isDark ? '#334155' : '#E2E8F0'), borderRadius: 2 }}>
+        <View style={{ width: `${progress * 100}%`, height: '100%', backgroundColor: isMe ? '#FFFFFF' : (isDark ? '#60A5FA' : '#2563EB'), borderRadius: 2 }} />
       </View>
     </View>
   );
