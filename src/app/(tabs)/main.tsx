@@ -134,7 +134,7 @@ export default function MainScreen() {
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.LOW_QUALITY);
       setRecording(recording);
       setIsRecording(true);
       setRecordDuration(0);
@@ -251,7 +251,7 @@ export default function MainScreen() {
 
     try {
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Koneksi lambat atau file terlalu besar. Silakan coba lagi.")), 15000)
+        setTimeout(() => reject(new Error("Koneksi lambat atau file terlalu besar. Silakan coba lagi.")), 30000)
       );
 
       if (laporMode === 'voice' && !finalAudioBase64) {
